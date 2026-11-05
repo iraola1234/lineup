@@ -9,7 +9,7 @@ Horarios semanales, horas reales y reparto de propinas para el equipo de un rest
 ### 1. Base de datos (Supabase)
 
 1. Crear un proyecto en [supabase.com](https://supabase.com), región **South America (São Paulo)**.
-2. **SQL Editor → New query**: pegar todo el contenido de `supabase/migrations/0001_init.sql` y tocar **Run**.
+2. **SQL Editor → New query**: pegar y ejecutar (**Run**), en orden, cada archivo de `supabase/migrations/` (`0001_…`, `0002_…`, …).
 3. **Authentication → Sign In / Providers → Email**: desactivar **"Allow new users to sign up"**. Así nadie puede crearse una cuenta por su cuenta.
 4. **Authentication → Users → Add user → Create new user**: crear el usuario del encargado (email + contraseña), marcando **Auto Confirm User**.
 5. **Project Settings → API**: copiar la **Project URL** y la **anon public key**.
@@ -53,7 +53,7 @@ supabase/
 | Etapa | Estado |
 |---|---|
 | 0. Setup: repo, base de datos, deploy | ✅ |
-| 1. Login, Configuración (empleados, áreas, turnos) | pendiente |
+| 1. Login, Configuración (empleados, áreas, turnos), diseño para PC | ✅ |
 | 2. Semana: vista por horas y lista, asignar, copiar, compartir | pendiente |
 | 3. Cierre del día, propinas, resumen mensual | pendiente |
 | 4. Prueba real con la plantilla | pendiente |
