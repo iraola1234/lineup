@@ -138,17 +138,27 @@ export function Sheet({
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
+  // onClose suele ser una función nueva en cada render: la guardamos en una ref
+  // para que el efecto de abajo corra solo al abrir/cerrar, no con cada tecla.
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  })
 
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') onCloseRef.current()
     }
     window.addEventListener('keydown', onKey)
-    const first = panelRef.current?.querySelector<HTMLElement>('input, select, textarea, button')
+    // Al abrir, foco en el primer campo del formulario (no en la cruz de cerrar).
+    const panel = panelRef.current
+    const first =
+      panel?.querySelector<HTMLElement>('[data-sheet-body] input, [data-sheet-body] select, [data-sheet-body] textarea') ??
+      panel?.querySelector<HTMLElement>('[data-sheet-body] button')
     first?.focus()
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 
@@ -183,7 +193,9 @@ export function Sheet({
             </svg>
           </button>
         </div>
-        <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-5">{children}</div>
+        <div data-sheet-body className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-5">
+          {children}
+        </div>
         {footer && (
           <div className="flex flex-wrap items-center gap-2 border-t border-line px-5 pt-4 pb-[max(16px,env(safe-area-inset-bottom))]">
             {footer}
