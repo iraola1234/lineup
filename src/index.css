@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+/* Tokens de diseño — estilo Mansalva (ver especificación, sección 5) */
+@theme {
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-ground: #F8F7F4;
+  --color-card: #FFFFFF;
+  --color-line: #E7E5DF;
+  --color-divider: #EFEDE8;
+  --color-head: #FAF9F6;
+  --color-foot: #F3F2EE;
+  --color-ink: #1C1D1A;
+  --color-muted: #6B6A63;
+
+  --color-olive: #55624A;
+  --color-olive-dark: #3F4A36;
+  --color-khaki: #8A9B6A;
+  --color-money: #475733;
+  --color-danger: #A33A2C;
+  --color-danger-soft: #F9E3DF;
+  --color-danger-line: #F0C6BE;
+
+  --color-manana-bg: #FBEFD9;
+  --color-manana-fg: #8A5A12;
+  --color-manana-bd: #F1D9AE;
+  --color-tarde-bg: #E8EEDF;
+  --color-tarde-fg: #475733;
+  --color-tarde-bd: #CFDBBE;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-olive);
+  outline-offset: 2px;
+}
