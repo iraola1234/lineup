@@ -30,29 +30,50 @@
   --color-tarde-bd: #CFDBBE;
 }
 
-html,
-body,
-#root {
-  height: 100%;
+/* Estilos base dentro de la capa "base" para que las clases de Tailwind
+   (tamaños de letra, colores) siempre puedan sobrescribirlos. */
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  /* Evita que el navegador del celular agrande textos por su cuenta (font boosting). */
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  svg {
+    flex-shrink: 0;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-ground);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 
-body {
-  margin: 0;
-  background: var(--color-ground);
-  color: var(--color-ink);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-  -webkit-tap-highlight-color: transparent;
+/* Líneas verticales de la tabla por horas (eje 05–02 = 21 h).
+   Celular: una línea cada 3 h. Computadora: una por hora. */
+.timeline-grid {
+  background-image: linear-gradient(to right, var(--color-divider) 1px, transparent 1px);
+  background-size: calc(100% / 7) 100%;
+}
+@media (min-width: 1024px) {
+  .timeline-grid {
+    background-size: calc(100% / 21) 100%;
+  }
 }
 
-button,
-input,
-select,
-textarea {
-  font: inherit;
-}
-
-:focus-visible {
-  outline: 2px solid var(--color-olive);
-  outline-offset: 2px;
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-olive);
+    outline-offset: 2px;
+  }
 }

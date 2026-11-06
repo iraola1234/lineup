@@ -54,6 +54,6 @@ supabase/
 |---|---|
 | 0. Setup: repo, base de datos, deploy | ✅ |
 | 1. Login, Configuración (empleados, áreas, turnos), diseño para PC | ✅ |
-| 2. Semana: vista por horas y lista, asignar, copiar, compartir | pendiente |
+| 2. Semana: vista por horas, lista y semana completa, asignar, copiar, compartir | ✅ |
 | 3. Cierre del día, propinas, resumen mensual | pendiente |
 | 4. Prueba real con la plantilla | pendiente |

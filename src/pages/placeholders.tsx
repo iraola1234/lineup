@@ -1,24 +1,6 @@
 import { PageHeader } from '../components/PageHeader'
 import { Placeholder } from '../components/Placeholder'
 
-export function SemanaPage() {
-  return (
-    <>
-      <PageHeader title="Horarios" subtitle="Semana actual" />
-      <Placeholder
-        etapa="Etapa 2 · 16 – 22 nov"
-        items={[
-          'Vista por horas (05 – 02) y vista lista',
-          'Vista de semana completa en computadora',
-          'Asignar turnos y turno "Otro"',
-          'Copiar semana, copiar día anterior, restablecer día',
-          'Imagen para el grupo de WhatsApp',
-        ]}
-      />
-    </>
-  )
-}
-
 export function CierrePage() {
   return (
     <>

@@ -206,6 +206,82 @@ export function Sheet({
   )
 }
 
+/* ---------- Confirmación ---------- */
+
+export function ConfirmDialog({
+  open,
+  title,
+  message,
+  confirmLabel,
+  danger = false,
+  busy = false,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean
+  title: string
+  message: string
+  confirmLabel: string
+  danger?: boolean
+  busy?: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  const titleId = useId()
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  const onCancelRef = useRef(onCancel)
+  useEffect(() => {
+    onCancelRef.current = onCancel
+  })
+  useEffect(() => {
+    if (!open) return
+    cancelRef.current?.focus()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancelRef.current()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
+
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center p-4 sm:items-center">
+      <button type="button" aria-label="Cancelar" tabIndex={-1} onClick={onCancel} className="absolute inset-0 bg-ink/30" />
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="relative flex w-full max-w-sm flex-col gap-4 rounded-2xl bg-card p-5 shadow-xl"
+      >
+        <div className="flex flex-col gap-1.5">
+          <h2 id={titleId} className="m-0 text-lg font-bold">
+            {title}
+          </h2>
+          <p className="m-0 text-sm text-muted">{message}</p>
+        </div>
+        <div className="flex justify-end gap-2">
+          <button
+            ref={cancelRef}
+            type="button"
+            onClick={onCancel}
+            className={`${btnBase} ${btnVariants.secondary}`}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className={`${btnBase} ${danger ? 'bg-danger text-white hover:bg-danger/90' : btnVariants.primary}`}
+          >
+            {busy ? 'Un momento…' : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ---------- Avisos ---------- */
 
 export function Notice({ tone = 'ok', children }: { tone?: 'ok' | 'error'; children: ReactNode }) {
