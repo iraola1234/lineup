@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { addDays } from './fechas'
 import { supabase } from './supabase'
 import { duracion } from './time'
@@ -7,191 +7,168 @@ import type { Asignacion, DiaCierre, OpcionTurno } from './types'
 /** Nombre y color con que se guarda un turno "Otro" (horario a mano). */
 export const OTRO = { nombre: 'Especial', color: 'especial' }
 
-type Resultado = { ok: boolean; mensaje: string }
+/** Un turno sin los campos que genera la base. */
+export type FilaTurno = Pick<
+  Asignacion,
+  'empleado_id' | 'fecha_jornada' | 'tipo_turno_id' | 'nombre_turno' | 'color' | 'inicio_plan' | 'fin_plan' | 'horas_reales' | 'ausente'
+>
 
-/** Columnas que se copian al duplicar un turno (sin id, horas reales ni ausencia). */
-function copia(a: Asignacion, fecha: string) {
+/** "Reemplazar los turnos de este rango (y empleado, si se indica) por estas filas." */
+export type Cambio = { desde: string; hasta: string; empleado: string | null; filas: FilaTurno[] }
+
+export function aFila(a: Asignacion): FilaTurno {
   return {
-    local_id: a.local_id,
     empleado_id: a.empleado_id,
-    fecha_jornada: fecha,
+    fecha_jornada: a.fecha_jornada,
     tipo_turno_id: a.tipo_turno_id,
     nombre_turno: a.nombre_turno,
     color: a.color,
     inicio_plan: a.inicio_plan,
     fin_plan: a.fin_plan,
+    horas_reales: a.horas_reales,
+    ausente: a.ausente,
   }
 }
 
+/** Turno nuevo (sin horas reales ni ausencia) a partir de una opción del selector. */
+export function filaDesdeOpcion(empleadoId: string, fecha: string, op: Exclude<OpcionTurno, null>): FilaTurno {
+  const base =
+    'tipo' in op
+      ? { tipo_turno_id: op.tipo.id, nombre_turno: op.tipo.nombre, color: op.tipo.color, inicio_plan: op.tipo.inicio, fin_plan: op.tipo.fin }
+      : { tipo_turno_id: null, nombre_turno: OTRO.nombre, color: OTRO.color, inicio_plan: op.otro.inicio, fin_plan: op.otro.fin }
+  return { empleado_id: empleadoId, fecha_jornada: fecha, horas_reales: null, ausente: false, ...base }
+}
+
+/** Para copiar: mismo turno en otra fecha (o persona), sin horas reales ni ausencia. */
+export function copiarFila(a: FilaTurno | Asignacion, cambios: Partial<Pick<FilaTurno, 'empleado_id' | 'fecha_jornada'>>): FilaTurno {
+  return { ...aFila(a as Asignacion), horas_reales: null, ausente: false, ...cambios }
+}
+
+const enCambio = (a: Asignacion, c: Cambio) =>
+  a.fecha_jornada >= c.desde && a.fecha_jornada <= c.hasta && (c.empleado === null || a.empleado_id === c.empleado)
+
+// Caché por semana: volver a una semana ya vista es instantáneo.
+const cache = new Map<string, { asignaciones: Asignacion[]; cierres: DiaCierre[] }>()
+let tmpSeq = 0
+
 /**
- * Turnos de una semana (lunes a domingo) y las acciones para editarlos.
- * `activos` = ids de empleados activos (al copiar no se arrastra a los dados de baja).
+ * Turnos de una semana y la forma de cambiarlos.
+ * Los cambios se ven al instante en pantalla y se guardan en segundo plano,
+ * en orden; si algo falla se vuelve al estado real de la base.
  */
-export function useSemana(localId: string, lunes: string, activos: Set<string>) {
+export function useSemana(localId: string, lunes: string) {
   const domingo = addDays(lunes, 6)
-  const [asignaciones, setAsignaciones] = useState<Asignacion[]>([])
-  const [cierres, setCierres] = useState<DiaCierre[]>([])
-  const [loading, setLoading] = useState(true)
+  const key = `${localId}|${lunes}`
+  const [asignaciones, setAsignacionesState] = useState<Asignacion[]>(() => cache.get(key)?.asignaciones ?? [])
+  const [cierres, setCierres] = useState<DiaCierre[]>(() => cache.get(key)?.cierres ?? [])
+  const [loading, setLoading] = useState(!cache.has(key))
   const [error, setError] = useState<string | null>(null)
+  const [guardando, setGuardando] = useState(false)
+
+  const ref = useRef(asignaciones)
+  const setAsignaciones = useCallback((next: Asignacion[]) => {
+    ref.current = next
+    setAsignacionesState(next)
+  }, [])
+
+  const cola = useRef<Promise<unknown>>(Promise.resolve())
+  const pendientes = useRef(0)
 
   const reload = useCallback(async () => {
     if (!supabase) return
     const [a, c] = await Promise.all([
-      supabase
-        .from('asignaciones')
-        .select('*')
-        .eq('local_id', localId)
-        .gte('fecha_jornada', lunes)
-        .lte('fecha_jornada', domingo)
-        .order('inicio_plan'),
+      supabase.from('asignaciones').select('*').eq('local_id', localId).gte('fecha_jornada', lunes).lte('fecha_jornada', domingo).order('inicio_plan'),
       supabase.from('dias_cierre').select('*').eq('local_id', localId).gte('fecha', lunes).lte('fecha', domingo),
     ])
+    if (pendientes.current > 0) return // hay cambios en curso: esperamos a que terminen
     if (a.error || c.error) {
       setError('No se pudieron cargar los turnos.')
     } else {
-      setAsignaciones((a.data ?? []) as Asignacion[])
-      setCierres((c.data ?? []) as DiaCierre[])
+      const data = { asignaciones: a.data as Asignacion[], cierres: c.data as DiaCierre[] }
+      cache.set(key, data)
+      setAsignaciones(data.asignaciones)
+      setCierres(data.cierres)
       setError(null)
     }
     setLoading(false)
-  }, [localId, lunes, domingo])
+  }, [localId, lunes, domingo, key, setAsignaciones])
 
   useEffect(() => {
-    setLoading(true)
+    const c = cache.get(key)
+    setAsignaciones(c?.asignaciones ?? [])
+    setCierres(c?.cierres ?? [])
+    setLoading(!c)
     reload()
-  }, [reload])
+  }, [key, reload, setAsignaciones])
 
-  /** Copiar o borrar un día cambia sus horas: si estaba confirmado, vuelve a pendiente. */
-  const reabrir = async (fechas: string[]) => {
-    const confirmadas = cierres.filter((c) => c.confirmado && fechas.includes(c.fecha)).map((c) => c.fecha)
-    if (!supabase || confirmadas.length === 0) return
-    await supabase
-      .from('dias_cierre')
-      .upsert(confirmadas.map((fecha) => ({ local_id: localId, fecha, confirmado: false, confirmado_en: null })), {
-        onConflict: 'local_id,fecha',
-      })
-  }
+  /**
+   * Aplica cambios: actualiza la pantalla ya mismo y los guarda en orden.
+   * Devuelve los cambios inversos para poder deshacer.
+   */
+  const aplicar = useCallback(
+    (cambios: Cambio[]): { deshacer: Cambio[]; guardado: Promise<boolean> } => {
+      let estado = ref.current
+      const deshacer: Cambio[] = []
+      for (const c of cambios) {
+        deshacer.unshift({ ...c, filas: estado.filter((a) => enCambio(a, c)).map(aFila) })
+        estado = [
+          ...estado.filter((a) => !enCambio(a, c)),
+          ...c.filas.map((f) => ({
+            ...f,
+            id: `tmp-${++tmpSeq}`,
+            local_id: localId,
+            horas_plan: duracion(f.inicio_plan, f.fin_plan),
+          })),
+        ]
+      }
+      setAsignaciones(estado)
+      cache.set(key, { asignaciones: estado, cierres })
 
-  /** Asigna (o quita) el turno de una persona en un día. Reemplaza lo que tuviera ese día. */
-  const asignar = async (empleadoId: string, fecha: string, opcion: OpcionTurno): Promise<Resultado> => {
-    if (!supabase) return { ok: false, mensaje: 'Sin conexión.' }
-
-    const fila =
-      opcion === null
-        ? null
-        : 'tipo' in opcion
-          ? {
-              tipo_turno_id: opcion.tipo.id,
-              nombre_turno: opcion.tipo.nombre,
-              color: opcion.tipo.color,
-              inicio_plan: opcion.tipo.inicio,
-              fin_plan: opcion.tipo.fin,
+      pendientes.current++
+      setGuardando(true)
+      const guardado = (cola.current = cola.current.then(async () => {
+        let ok = true
+        if (supabase) {
+          for (const c of cambios) {
+            const { error } = await supabase.rpc('reemplazar_turnos', {
+              p_local: localId,
+              p_desde: c.desde,
+              p_hasta: c.hasta,
+              p_empleado: c.empleado,
+              p_filas: c.filas,
+            })
+            if (error) {
+              ok = false
+              break
             }
-          : {
-              tipo_turno_id: null,
-              nombre_turno: OTRO.nombre,
-              color: OTRO.color,
-              inicio_plan: opcion.otro.inicio,
-              fin_plan: opcion.otro.fin,
-            }
+          }
+        }
+        pendientes.current--
+        if (pendientes.current === 0) {
+          setGuardando(false)
+          await reload() // sincroniza ids reales y cierres
+        }
+        return ok
+      }) as Promise<boolean>)
+      return { deshacer, guardado }
+    },
+    [localId, key, cierres, reload, setAsignaciones],
+  )
 
-    // Actualización inmediata en pantalla; después se confirma con la base.
-    setAsignaciones((prev) => {
-      const resto = prev.filter((a) => !(a.empleado_id === empleadoId && a.fecha_jornada === fecha))
-      if (!fila) return resto
-      return [
-        ...resto,
-        {
-          id: `tmp-${empleadoId}-${fecha}`,
-          local_id: localId,
-          empleado_id: empleadoId,
-          fecha_jornada: fecha,
-          horas_plan: duracion(fila.inicio_plan, fila.fin_plan),
-          horas_reales: null,
-          ausente: false,
-          ...fila,
-        },
-      ]
-    })
+  /** Lee turnos de un rango fuera de la semana cargada (para copiar). */
+  const leerRango = useCallback(
+    async (desde: string, hasta: string): Promise<Asignacion[] | null> => {
+      if (!supabase) return null
+      const { data, error } = await supabase
+        .from('asignaciones')
+        .select('*')
+        .eq('local_id', localId)
+        .gte('fecha_jornada', desde)
+        .lte('fecha_jornada', hasta)
+      return error ? null : (data as Asignacion[])
+    },
+    [localId],
+  )
 
-    const del = await supabase
-      .from('asignaciones')
-      .delete()
-      .eq('local_id', localId)
-      .eq('empleado_id', empleadoId)
-      .eq('fecha_jornada', fecha)
-    const ins = fila
-      ? await supabase.from('asignaciones').insert({ local_id: localId, empleado_id: empleadoId, fecha_jornada: fecha, ...fila })
-      : { error: null }
-    await reload()
-    if (del.error || ins.error) return { ok: false, mensaje: 'No se pudo guardar el turno. Probá de nuevo.' }
-    return { ok: true, mensaje: '' }
-  }
-
-  /** Reemplaza los turnos de `destino` por los de `origen` (misma lista de días, desplazada). */
-  const copiar = async (origenDesde: string, origenHasta: string, offsetDias: number, destDesde: string, destHasta: string) => {
-    if (!supabase) return { ok: false, n: 0 }
-    const src = await supabase
-      .from('asignaciones')
-      .select('*')
-      .eq('local_id', localId)
-      .gte('fecha_jornada', origenDesde)
-      .lte('fecha_jornada', origenHasta)
-    if (src.error) return { ok: false, n: 0 }
-    const filas = ((src.data ?? []) as Asignacion[])
-      .filter((a) => activos.has(a.empleado_id))
-      .map((a) => copia(a, addDays(a.fecha_jornada, offsetDias)))
-    const del = await supabase
-      .from('asignaciones')
-      .delete()
-      .eq('local_id', localId)
-      .gte('fecha_jornada', destDesde)
-      .lte('fecha_jornada', destHasta)
-    if (del.error) return { ok: false, n: 0 }
-    if (filas.length > 0) {
-      const ins = await supabase.from('asignaciones').insert(filas)
-      if (ins.error) return { ok: false, n: 0 }
-    }
-    return { ok: true, n: filas.length }
-  }
-
-  const copiarSemanaAnterior = async (): Promise<Resultado> => {
-    const r = await copiar(addDays(lunes, -7), addDays(domingo, -7), 7, lunes, domingo)
-    if (r.ok) await reabrir(Array.from({ length: 7 }, (_, i) => addDays(lunes, i)))
-    await reload()
-    if (!r.ok) return { ok: false, mensaje: 'No se pudo copiar la semana. Probá de nuevo.' }
-    if (r.n === 0) return { ok: true, mensaje: 'La semana anterior estaba vacía, así que esta quedó vacía.' }
-    return { ok: true, mensaje: `Se copiaron ${r.n} turnos de la semana anterior.` }
-  }
-
-  const copiarDiaAnterior = async (fecha: string): Promise<Resultado> => {
-    const ayer = addDays(fecha, -1)
-    const r = await copiar(ayer, ayer, 1, fecha, fecha)
-    if (r.ok) await reabrir([fecha])
-    await reload()
-    if (!r.ok) return { ok: false, mensaje: 'No se pudo copiar el día. Probá de nuevo.' }
-    if (r.n === 0) return { ok: true, mensaje: 'El día anterior estaba vacío, así que este quedó vacío.' }
-    return { ok: true, mensaje: `Se copiaron ${r.n} turnos del día anterior.` }
-  }
-
-  const restablecerDia = async (fecha: string): Promise<Resultado> => {
-    if (!supabase) return { ok: false, mensaje: 'Sin conexión.' }
-    const del = await supabase.from('asignaciones').delete().eq('local_id', localId).eq('fecha_jornada', fecha)
-    if (!del.error) await reabrir([fecha])
-    await reload()
-    if (del.error) return { ok: false, mensaje: 'No se pudo restablecer el día. Probá de nuevo.' }
-    return { ok: true, mensaje: 'El día quedó vacío.' }
-  }
-
-  return {
-    asignaciones,
-    cierres,
-    loading,
-    error,
-    reload,
-    asignar,
-    copiarSemanaAnterior,
-    copiarDiaAnterior,
-    restablecerDia,
-  }
+  return { asignaciones, cierres, loading, error, guardando, reload, aplicar, leerRango, domingo }
 }

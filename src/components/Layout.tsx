@@ -1,45 +1,73 @@
+import { BarChart3, CalendarDays, CircleCheckBig, LogOut, Settings, Wallet, type LucideIcon } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { useLocal } from '../lib/local'
-import { IconCalendar, IconCash, IconCheck, IconSettings, IconTrend } from './icons'
+import { Avatar, Menu } from './ui'
 
-const tabs = [
-  { to: '/', label: 'Semana', Icon: IconCalendar, end: true },
-  { to: '/cierre', label: 'Cierre', Icon: IconCheck, end: false },
-  { to: '/propinas', label: 'Propinas', Icon: IconCash, end: false },
-  { to: '/mes', label: 'Mes', Icon: IconTrend, end: false },
+const secciones: { to: string; label: string; Icon: LucideIcon; end: boolean }[] = [
+  { to: '/', label: 'Semana', Icon: CalendarDays, end: true },
+  { to: '/cierre', label: 'Cierre', Icon: CircleCheckBig, end: false },
+  { to: '/propinas', label: 'Propinas', Icon: Wallet, end: false },
+  { to: '/mes', label: 'Mes', Icon: BarChart3, end: false },
 ]
 
 /**
  * Celular: contenido a pantalla completa + navegación inferior.
- * Computadora (lg ≥ 1024 px): menú lateral fijo + contenido a todo el ancho.
+ * Computadora (≥ 1024 px): menú lateral fijo + contenido a todo el ancho.
  */
 export function Layout() {
   const { local } = useLocal()
-  const { session } = useAuth()
-  const inicial = (local?.nombre ?? 'L').trim().charAt(0).toUpperCase()
+  const { session, signOut } = useAuth()
+  const email = session?.user.email ?? ''
 
   return (
     <div className="flex h-full bg-ground">
-      {/* Menú lateral (solo computadora) */}
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-line bg-head lg:flex">
-        <div className="flex h-16 items-center gap-3 border-b border-line px-5">
-          <span className="flex size-9 items-center justify-center rounded-xl border border-line bg-card text-sm font-semibold">
-            {inicial}
-          </span>
-          <span className="truncate text-[15px] font-semibold">{local?.nombre}</span>
+      {/* Menú lateral (computadora) */}
+      <aside className="hidden w-[248px] shrink-0 flex-col border-r border-line bg-[#F3F2EE] lg:flex">
+        <div className="flex h-16 items-center gap-2.5 px-5">
+          <img src="/favicon.svg" alt="" className="size-7 rounded-lg" />
+          <span className="text-[15px] font-semibold tracking-tight">Lineup</span>
         </div>
-        <nav aria-label="Secciones" className="flex flex-1 flex-col gap-1 p-3">
-          <span className="px-3 pt-3 pb-1 text-xs font-medium text-muted">Equipo</span>
-          {tabs.map(({ to, label, Icon, end }) => (
-            <SideLink key={to} to={to} end={end} label={label} Icon={Icon} />
+
+        <div className="mx-3 mb-2 flex items-center gap-3 rounded-xl border border-line bg-card px-3 py-2.5 shadow-xs">
+          <span className="flex size-8 items-center justify-center rounded-lg bg-olive text-[13px] font-semibold text-white">
+            {(local?.nombre ?? 'L').trim().charAt(0).toUpperCase()}
+          </span>
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate text-sm font-semibold">{local?.nombre}</span>
+            <span className="text-[11px] text-muted">Local</span>
+          </span>
+        </div>
+
+        <nav aria-label="Secciones" className="flex flex-1 flex-col gap-0.5 px-3 py-2">
+          <span className="px-3 pt-2 pb-1.5 text-[11px] font-medium tracking-wide text-faint uppercase">Equipo</span>
+          {secciones.map((s) => (
+            <SideLink key={s.to} {...s} />
           ))}
-          <span className="px-3 pt-5 pb-1 text-xs font-medium text-muted">Ajustes</span>
-          <SideLink to="/configuracion" end={false} label="Configuración" Icon={IconSettings} />
+          <span className="px-3 pt-5 pb-1.5 text-[11px] font-medium tracking-wide text-faint uppercase">Ajustes</span>
+          <SideLink to="/configuracion" end={false} label="Configuración" Icon={Settings} />
         </nav>
-        <div className="border-t border-line px-5 py-4 text-xs text-muted">
-          <span className="block font-semibold text-ink">Lineup</span>
-          <span className="block truncate">{session?.user.email}</span>
+
+        <div className="border-t border-line p-3">
+          <Menu
+            align="start"
+            items={[{ label: 'Cerrar sesión', icon: <LogOut size={16} />, onSelect: signOut }]}
+            trigger={({ toggle, ref, open }) => (
+              <button
+                ref={ref}
+                type="button"
+                onClick={toggle}
+                aria-expanded={open}
+                className={`flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-card ${open ? 'bg-card' : ''}`}
+              >
+                <Avatar nombre={email || 'Encargado'} size={32} />
+                <span className="flex min-w-0 flex-col">
+                  <span className="text-[13px] font-semibold">Encargado</span>
+                  <span className="truncate text-[11px] text-muted">{email}</span>
+                </span>
+              </button>
+            )}
+          />
         </div>
       </aside>
 
@@ -48,30 +76,32 @@ export function Layout() {
           <Outlet />
         </main>
 
-        {/* Navegación inferior (solo celular) */}
+        {/* Navegación inferior (celular) */}
         <nav
           aria-label="Secciones"
-          className="grid grid-cols-4 border-t border-line bg-card px-2 pb-[max(14px,env(safe-area-inset-bottom))] lg:hidden"
+          className="grid grid-cols-4 border-t border-line bg-card/95 px-2 pb-[max(10px,env(safe-area-inset-bottom))] backdrop-blur-md lg:hidden"
         >
-          {tabs.map(({ to, label, Icon, end }) => (
+          {secciones.map(({ to, label, Icon, end }) => (
             <NavLink
               key={to}
               to={to}
               end={end}
               className={({ isActive }) =>
-                `flex h-[60px] flex-col items-center gap-1 text-[11px] font-semibold ${
-                  isActive ? 'text-olive' : 'text-muted'
+                `group flex h-[58px] flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors ${
+                  isActive ? 'text-olive' : 'text-muted active:text-ink'
                 }`
               }
             >
               {({ isActive }) => (
                 <>
                   <span
-                    aria-hidden="true"
-                    className={`mb-1.5 h-[3px] w-7 rounded-b ${isActive ? 'bg-khaki' : 'bg-transparent'}`}
-                  />
-                  <Icon />
-                  {label}
+                    className={`flex h-7 w-14 items-center justify-center rounded-full transition-colors duration-200 ${
+                      isActive ? 'bg-olive-soft' : 'group-active:bg-hover'
+                    }`}
+                  >
+                    <Icon size={20} strokeWidth={isActive ? 2.2 : 1.8} />
+                  </span>
+                  <span className={isActive ? 'font-semibold' : ''}>{label}</span>
                 </>
               )}
             </NavLink>
@@ -82,31 +112,21 @@ export function Layout() {
   )
 }
 
-function SideLink({
-  to,
-  end,
-  label,
-  Icon,
-}: {
-  to: string
-  end: boolean
-  label: string
-  Icon: (p: object) => React.ReactElement
-}) {
+function SideLink({ to, end, label, Icon }: { to: string; end: boolean; label: string; Icon: LucideIcon }) {
   return (
     <NavLink
       to={to}
       end={end}
       className={({ isActive }) =>
-        `relative flex h-11 items-center gap-3 rounded-xl px-3 text-[15px] ${
-          isActive ? 'bg-card font-semibold text-ink shadow-[0_1px_2px_rgba(28,29,26,0.08)]' : 'text-ink/80 hover:bg-card/60'
+        `relative flex h-10 items-center gap-3 rounded-xl px-3 text-sm transition-colors ${
+          isActive ? 'bg-card font-semibold text-ink shadow-xs' : 'text-ink-2 hover:bg-card/70 hover:text-ink active:bg-card'
         }`
       }
     >
       {({ isActive }) => (
         <>
-          {isActive && <span aria-hidden="true" className="absolute top-2.5 bottom-2.5 -left-3 w-[3px] rounded-r bg-olive" />}
-          <Icon />
+          {isActive && <span aria-hidden="true" className="absolute top-2 bottom-2 -left-3 w-[3px] rounded-r bg-olive" />}
+          <Icon size={18} strokeWidth={isActive ? 2.2 : 1.8} className={isActive ? 'text-olive' : 'text-muted'} />
           {label}
         </>
       )}

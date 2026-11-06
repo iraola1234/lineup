@@ -1,6 +1,8 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
+import { ToastProvider } from './components/toast'
 import { AuthProvider, useAuth } from './lib/auth'
+import { DataProvider } from './lib/data'
 import { LocalProvider, useLocal } from './lib/local'
 import { ConfiguracionPage } from './pages/configuracion/ConfiguracionPage'
 import { LoginPage } from './pages/LoginPage'
@@ -8,10 +10,10 @@ import { OnboardingPage } from './pages/OnboardingPage'
 import { CierrePage, MesPage, PropinasPage } from './pages/placeholders'
 import { SemanaPage } from './pages/semana/SemanaPage'
 
-function Cargando() {
+function Splash() {
   return (
-    <div className="flex h-full items-center justify-center text-sm text-muted" role="status">
-      Cargando…
+    <div className="flex h-full flex-col items-center justify-center gap-4" role="status" aria-label="Cargando">
+      <img src="/favicon.svg" alt="" className="size-12 animate-pulse rounded-2xl" />
     </div>
   )
 }
@@ -19,33 +21,38 @@ function Cargando() {
 function AppRoutes() {
   const { local, loading, error } = useLocal()
 
-  if (loading) return <Cargando />
+  if (loading) return <Splash />
   if (error) {
     return (
-      <div className="flex h-full items-center justify-center p-6 text-center text-sm text-danger" role="alert">
-        {error} Revisá la conexión y recargá la página.
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center" role="alert">
+        <p className="m-0 text-sm text-danger">{error}</p>
+        <button type="button" onClick={() => location.reload()} className="h-11 rounded-xl border border-line bg-card px-4 text-sm font-semibold hover:bg-hover">
+          Reintentar
+        </button>
       </div>
     )
   }
   if (!local) return <OnboardingPage />
 
   return (
-    <Routes>
-      <Route element={<Layout />}>
-        <Route index element={<SemanaPage />} />
-        <Route path="cierre" element={<CierrePage />} />
-        <Route path="propinas" element={<PropinasPage />} />
-        <Route path="mes" element={<MesPage />} />
-        <Route path="configuracion" element={<ConfiguracionPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Route>
-    </Routes>
+    <DataProvider localId={local.id}>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index element={<SemanaPage />} />
+          <Route path="cierre" element={<CierrePage />} />
+          <Route path="propinas" element={<PropinasPage />} />
+          <Route path="mes" element={<MesPage />} />
+          <Route path="configuracion" element={<ConfiguracionPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+    </DataProvider>
   )
 }
 
 function Gate() {
   const { session, loading } = useAuth()
-  if (loading) return <Cargando />
+  if (loading) return <Splash />
   if (!session) return <LoginPage />
   return (
     <LocalProvider>
@@ -57,9 +64,11 @@ function Gate() {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Gate />
-      </BrowserRouter>
+      <ToastProvider>
+        <BrowserRouter>
+          <Gate />
+        </BrowserRouter>
+      </ToastProvider>
     </AuthProvider>
   )
 }

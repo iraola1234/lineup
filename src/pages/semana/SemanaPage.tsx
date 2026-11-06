@@ -1,64 +1,68 @@
+import {
+  CalendarSync,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Eraser,
+  Loader2,
+  MoreHorizontal,
+  Rows3,
+  Share,
+  Clock3,
+  Users,
+} from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageBody, PageHeader } from '../../components/PageHeader'
-import { Button, ConfirmDialog, Notice, Segmented, Sheet } from '../../components/ui'
+import { useToast } from '../../components/toast'
+import { Button, ConfirmDialog, EmptyState, IconButton, Menu, Segmented, Skeleton, type MenuItem } from '../../components/ui'
 import { TURNO_COLORS, turnoColor } from '../../lib/colors'
-import {
-  DIAS_LETRA,
-  addDays,
-  diasDeSemana,
-  fechaCorta,
-  fechaLarga,
-  hoyISO,
-  indiceDia,
-  lunesDe,
-  numeroDia,
-  rangoSemana,
-} from '../../lib/fechas'
+import { useData } from '../../lib/data'
+import { DIAS_LETRA, addDays, diasDeSemana, fechaCorta, fechaLarga, hoyISO, indiceDia, lunesDe, numeroDia, rangoSemana } from '../../lib/fechas'
 import { useLocal, useLocalId } from '../../lib/local'
-import { useSemana } from '../../lib/semana'
-import { corta } from '../../lib/time'
-import type { Area, Asignacion, Empleado, OpcionTurno, TipoTurno } from '../../lib/types'
+import { aFila, copiarFila, filaDesdeOpcion, useSemana, type Cambio } from '../../lib/semana'
+import { corta, fmtHoras } from '../../lib/time'
+import type { Asignacion, Empleado, OpcionTurno } from '../../lib/types'
 import { useIsDesktop } from '../../lib/useMedia'
-import { useTabla } from '../../lib/useTabla'
 import { Compartir } from './Compartir'
+import { DiaPorHoras } from './DiaPorHoras'
+import { EditorTurno } from './EditorTurno'
+import { GrillaSemana } from './GrillaSemana'
+import { horasTotales, porArea } from './helpers'
 import { Lista } from './Lista'
-import { PorHoras } from './PorHoras'
-import { SemanaCompleta } from './SemanaCompleta'
-import { TurnoPicker } from './TurnoPicker'
 
-type Vista = 'horas' | 'lista' | 'semana'
-type Confirmar = 'semana' | 'dia' | 'reset' | null
+type Vista = 'semana' | 'dia' | 'lista'
+type Pendiente = { titulo: string; mensaje: string; label: string; danger?: boolean; run: () => Promise<void> }
 
 export function SemanaPage() {
   const localId = useLocalId()
   const { local } = useLocal()
+  const { areas, empleados, tiposActivos: tipos, loading: cargandoDatos, error: errorDatos } = useData()
   const desktop = useIsDesktop()
-
-  const areas = useTabla<Area>('areas', localId, [{ col: 'orden' }, { col: 'nombre' }])
-  const emps = useTabla<Empleado>('empleados', localId, [{ col: 'orden' }, { col: 'nombre' }])
-  const tiposT = useTabla<TipoTurno>('tipos_turno', localId, [{ col: 'orden' }, { col: 'inicio' }])
-  const tipos = useMemo(() => tiposT.rows.filter((t) => !t.archivado), [tiposT.rows])
+  const toast = useToast()
 
   const hoy = hoyISO()
   const [lunes, setLunes] = useState(() => lunesDe(hoy))
   const [dia, setDia] = useState(hoy)
-  const [vistaElegida, setVista] = useState<Vista>('horas')
-  const vista: Vista = vistaElegida === 'semana' && !desktop ? 'horas' : vistaElegida
-  const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
-  const [confirmar, setConfirmar] = useState<Confirmar>(null)
-  const [busy, setBusy] = useState(false)
+  const [vistaElegida, setVista] = useState<Vista | null>(null)
+  const vista: Vista = (() => {
+    const v = vistaElegida ?? (desktop ? 'semana' : 'dia')
+    if (desktop && v === 'lista') return 'dia'
+    if (!desktop && v === 'semana') return 'dia'
+    return v
+  })()
   const [editor, setEditor] = useState<{ emp: Empleado; fecha: string } | null>(null)
+  const [pendiente, setPendiente] = useState<Pendiente | null>(null)
+  const [busy, setBusy] = useState(false)
   const [compartir, setCompartir] = useState(false)
 
-  const activos = useMemo(() => new Set(emps.rows.filter((e) => e.activo).map((e) => e.id)), [emps.rows])
-  const semana = useSemana(localId, lunes, activos)
+  const semana = useSemana(localId, lunes)
   const dias = diasDeSemana(lunes)
 
-  // Índice rápido de turnos por persona y día.
   const indice = useMemo(() => {
     const m = new Map<string, Asignacion[]>()
-    for (const a of semana.asignaciones) {
+    for (const a of [...semana.asignaciones].sort((x, y) => x.inicio_plan.localeCompare(y.inicio_plan))) {
       const k = `${a.empleado_id}|${a.fecha_jornada}`
       m.set(k, [...(m.get(k) ?? []), a])
     }
@@ -72,164 +76,238 @@ export function SemanaPage() {
     return m
   }, [semana.asignaciones])
 
-  // Activos + los dados de baja que igual tienen turnos esta semana.
+  // Activos + dados de baja que igual tienen turnos esta semana.
   const conTurnos = useMemo(() => new Set(semana.asignaciones.map((a) => a.empleado_id)), [semana.asignaciones])
-  const visibles = emps.rows.filter((e) => e.activo || conTurnos.has(e.id))
+  const visibles = useMemo(() => empleados.filter((e) => e.activo || conTurnos.has(e.id)), [empleados, conTurnos])
+  const grupos = useMemo(() => porArea(areas, visibles), [areas, visibles])
+  const activos = useMemo(() => new Set(empleados.filter((e) => e.activo).map((e) => e.id)), [empleados])
 
-  const turnosDelDia = semana.asignaciones.filter((a) => a.fecha_jornada === dia)
-  const resumen = [
-    ...tipos.map((t) => ({
-      key: t.id,
-      nombre: t.nombre,
-      hora: `${corta(t.inicio)}–${corta(t.fin)}`,
-      c: turnoColor(t.color),
-      n: turnosDelDia.filter((a) => a.tipo_turno_id === t.id).length,
-      fijo: true,
-    })),
-    {
-      key: 'otro',
-      nombre: 'Especial',
-      hora: 'a mano',
-      c: TURNO_COLORS.especial,
-      n: turnosDelDia.filter((a) => a.tipo_turno_id === null || !tipos.some((t) => t.id === a.tipo_turno_id)).length,
-      fijo: false,
-    },
-  ].filter((r) => r.fijo || r.n > 0)
+  /* ---------- Cambios (con deshacer) ---------- */
+
+  const aplicar = (cambios: Cambio[], mensaje: string) => {
+    const { deshacer, guardado } = semana.aplicar(cambios)
+    toast.show(mensaje, {
+      action: {
+        label: 'Deshacer',
+        onClick: () => {
+          semana.aplicar(deshacer).guardado.then((ok) => ok && toast.show('Cambio deshecho'))
+        },
+      },
+    })
+    guardado.then((ok) => {
+      if (!ok) toast.show('No se pudo guardar el cambio. Revisá la conexión y probá de nuevo.', { tone: 'error' })
+    })
+  }
+
+  const describir = (op: OpcionTurno) =>
+    op === null ? 'libre' : 'tipo' in op ? `${op.tipo.nombre} ${corta(op.tipo.inicio)}–${corta(op.tipo.fin)}` : `${op.otro.inicio}–${op.otro.fin}`
+
+  const setTurno = (emp: Empleado, fecha: string, op: OpcionTurno, cerrar = true) => {
+    aplicar(
+      [{ desde: fecha, hasta: fecha, empleado: emp.id, filas: op ? [filaDesdeOpcion(emp.id, fecha, op)] : [] }],
+      `${emp.nombre.split(' ')[0]} · ${fechaCorta(fecha)}: ${describir(op)}`,
+    )
+    if (cerrar) setEditor(null)
+  }
+
+  const addTurno = (emp: Empleado, fecha: string, op: Exclude<OpcionTurno, null>) => {
+    const actuales = turnosDe(emp.id, fecha).map(aFila)
+    aplicar(
+      [{ desde: fecha, hasta: fecha, empleado: emp.id, filas: [...actuales, filaDesdeOpcion(emp.id, fecha, op)] }],
+      `${emp.nombre.split(' ')[0]} · ${fechaCorta(fecha)}: se agregó ${describir(op)}`,
+    )
+    setEditor(null)
+  }
+
+  const removeTurno = (emp: Empleado, fecha: string, id: string) => {
+    const resto = turnosDe(emp.id, fecha).filter((a) => a.id !== id).map(aFila)
+    aplicar([{ desde: fecha, hasta: fecha, empleado: emp.id, filas: resto }], `${emp.nombre.split(' ')[0]} · ${fechaCorta(fecha)}: turno quitado`)
+  }
+
+  const mover = (id: string, destino: Empleado, fecha: string, copiar: boolean) => {
+    const a = semana.asignaciones.find((x) => x.id === id)
+    if (!a || (a.empleado_id === destino.id && a.fecha_jornada === fecha)) return
+    const cambios: Cambio[] = []
+    if (!copiar) {
+      const restoOrigen = turnosDe(a.empleado_id, a.fecha_jornada).filter((x) => x.id !== id).map(aFila)
+      cambios.push({ desde: a.fecha_jornada, hasta: a.fecha_jornada, empleado: a.empleado_id, filas: restoOrigen })
+    }
+    cambios.push({ desde: fecha, hasta: fecha, empleado: destino.id, filas: [copiarFila(a, { empleado_id: destino.id, fecha_jornada: fecha })] })
+    aplicar(cambios, `${copiar ? 'Copiado' : 'Movido'} a ${destino.nombre.split(' ')[0]} · ${fechaCorta(fecha)}`)
+  }
+
+  const confirmarSi = (hayDatos: boolean, p: Pendiente) => (hayDatos ? setPendiente(p) : p.run())
+
+  const copiarSemana = () =>
+    confirmarSi(semana.asignaciones.length > 0, {
+      titulo: '¿Reemplazar esta semana?',
+      mensaje: `La semana del ${rangoSemana(lunes)} ya tiene turnos. Se reemplazan por los de la semana anterior. Vas a poder deshacerlo.`,
+      label: 'Copiar semana',
+      run: async () => {
+        const src = await semana.leerRango(addDays(lunes, -7), addDays(lunes, -1))
+        if (!src) return toast.show('No se pudo leer la semana anterior. Probá de nuevo.', { tone: 'error' })
+        if (src.length === 0) return toast.show('La semana anterior no tiene turnos para copiar.', { tone: 'error' })
+        const filas = src.filter((a) => activos.has(a.empleado_id)).map((a) => copiarFila(a, { fecha_jornada: addDays(a.fecha_jornada, 7) }))
+        aplicar([{ desde: lunes, hasta: semana.domingo, empleado: null, filas }], `Se copiaron ${filas.length} turnos de la semana anterior`)
+      },
+    })
+
+  const copiarDia = (fecha: string) => {
+    const ayer = addDays(fecha, -1)
+    confirmarSi(semana.asignaciones.some((a) => a.fecha_jornada === fecha), {
+      titulo: `¿Reemplazar el ${fechaCorta(fecha)}?`,
+      mensaje: `Este día ya tiene turnos. Se reemplazan por los del ${fechaCorta(ayer)}. Vas a poder deshacerlo.`,
+      label: 'Copiar día',
+      run: async () => {
+        const src = ayer >= lunes ? semana.asignaciones.filter((a) => a.fecha_jornada === ayer) : await semana.leerRango(ayer, ayer)
+        if (!src) return toast.show('No se pudo leer el día anterior.', { tone: 'error' })
+        if (src.length === 0) return toast.show(`El ${fechaCorta(ayer)} no tiene turnos para copiar.`, { tone: 'error' })
+        const filas = src.filter((a) => activos.has(a.empleado_id)).map((a) => copiarFila(a, { fecha_jornada: fecha }))
+        aplicar([{ desde: fecha, hasta: fecha, empleado: null, filas }], `Se copiaron ${filas.length} turnos del ${fechaCorta(ayer)}`)
+      },
+    })
+  }
+
+  const vaciarDia = (fecha: string) => {
+    const n = semana.asignaciones.filter((a) => a.fecha_jornada === fecha).length
+    if (n === 0) return toast.show(`El ${fechaCorta(fecha)} ya está vacío.`)
+    setPendiente({
+      titulo: `¿Vaciar el ${fechaCorta(fecha)}?`,
+      mensaje: `Se quitan los ${n} turnos de ese día, con sus horas corregidas y ausencias. Vas a poder deshacerlo.`,
+      label: 'Vaciar día',
+      danger: true,
+      run: async () => aplicar([{ desde: fecha, hasta: fecha, empleado: null, filas: [] }], `Se vació el ${fechaCorta(fecha)}`),
+    })
+  }
+
+  const accionesDia = (fecha: string): MenuItem[] => [
+    { label: 'Copiar día anterior', description: `Trae los turnos del ${fechaCorta(addDays(fecha, -1))}`, icon: <Copy size={16} />, onSelect: () => copiarDia(fecha) },
+    { label: 'Vaciar día', description: 'Quita todos los turnos de ese día', icon: <Eraser size={16} />, danger: true, onSelect: () => vaciarDia(fecha) },
+  ]
+
+  /* ---------- Navegación ---------- */
 
   const irASemana = (nuevoLunes: string) => {
     setLunes(nuevoLunes)
     setDia(nuevoLunes === lunesDe(hoy) ? hoy : nuevoLunes)
-    setMsg(null)
   }
 
-  const elegirDia = (d: string) => {
-    setDia(d)
-    setMsg(null)
-  }
-
-  const asignar = async (emp: Empleado, fecha: string, op: OpcionTurno) => {
-    setMsg(null)
-    const r = await semana.asignar(emp.id, fecha, op)
-    if (!r.ok) setMsg({ tone: 'error', text: r.mensaje })
-  }
-
-  const ejecutar = async (accion: Exclude<Confirmar, null>) => {
-    setBusy(true)
-    const r =
-      accion === 'semana'
-        ? await semana.copiarSemanaAnterior()
-        : accion === 'dia'
-          ? await semana.copiarDiaAnterior(dia)
-          : await semana.restablecerDia(dia)
-    setBusy(false)
-    setConfirmar(null)
-    setMsg({ tone: r.ok ? 'ok' : 'error', text: r.mensaje })
-  }
-
-  const pedir = (accion: Exclude<Confirmar, null>) => {
-    const hayDatos = accion === 'semana' ? semana.asignaciones.length > 0 : turnosDelDia.length > 0
-    if (accion === 'reset' && !hayDatos) return setMsg({ tone: 'ok', text: 'Este día ya está vacío.' })
-    if (hayDatos) setConfirmar(accion)
-    else ejecutar(accion)
-  }
-
-  const textosConfirmar = {
-    semana: {
-      title: '¿Reemplazar esta semana?',
-      message: `La semana ${rangoSemana(lunes)} ya tiene turnos. Se van a reemplazar por los de la semana anterior.`,
-      label: 'Copiar semana',
-      danger: false,
+  const turnosDelDia = semana.asignaciones.filter((a) => a.fecha_jornada === dia)
+  const resumen = [
+    ...tipos.map((t) => ({ key: t.id, nombre: t.nombre, c: turnoColor(t.color), n: turnosDelDia.filter((a) => a.tipo_turno_id === t.id).length })),
+    {
+      key: 'otro',
+      nombre: 'Especial',
+      c: TURNO_COLORS.especial,
+      n: turnosDelDia.filter((a) => !tipos.some((t) => t.id === a.tipo_turno_id)).length,
     },
-    dia: {
-      title: `¿Reemplazar el ${fechaCorta(dia)}?`,
-      message: `Este día ya tiene turnos. Se van a reemplazar por los del ${fechaCorta(addDays(dia, -1))}.`,
-      label: 'Copiar día',
-      danger: false,
-    },
-    reset: {
-      title: `¿Vaciar el ${fechaCorta(dia)}?`,
-      message: 'Se borran todos los turnos de ese día, con sus horas corregidas y ausencias.',
-      label: 'Vaciar día',
-      danger: true,
-    },
-  }
+  ].filter((r) => r.n > 0)
+  const personasDia = new Set(turnosDelDia.filter((a) => !a.ausente).map((a) => a.empleado_id)).size
 
-  const cargando = areas.loading || emps.loading || tiposT.loading || semana.loading
-  const errorCarga = areas.error ?? emps.error ?? tiposT.error ?? semana.error
+  const cargando = cargandoDatos || semana.loading
+  const errorCarga = errorDatos ?? semana.error
+  const editorTurnos = editor ? turnosDe(editor.emp.id, editor.fecha) : []
 
-  const vistaProps = {
-    areas: areas.rows,
-    empleados: visibles,
-    tipos,
-    turnosDe,
-    horasSemana,
-    fecha: dia,
-    onPick: asignar,
-    onEditar: (emp: Empleado, fecha: string) => setEditor({ emp, fecha }),
-  }
+  const menuMovil: MenuItem[] = [
+    { label: 'Copiar semana anterior', description: `Reemplaza la semana del ${rangoSemana(lunes)}`, icon: <CalendarSync size={16} />, onSelect: copiarSemana },
+    ...accionesDia(dia).map((it) => ({ ...it, label: it.label === 'Vaciar día' ? `Vaciar ${fechaCorta(dia)}` : `${it.label} (${fechaCorta(dia)})` })),
+  ]
 
   return (
     <>
       <PageHeader
         title="Horarios"
-        subtitle={vista === 'semana' ? 'Toda la semana · tocá un casillero para cambiarlo' : fechaLarga(dia)}
-        action={
-          <Button variant="primary" onClick={() => setCompartir(true)} disabled={cargando || visibles.length === 0}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
-              <path d="M16 6l-4-4-4 4" />
-              <path d="M12 2v13" />
-            </svg>
-            Compartir
-          </Button>
+        subtitle={vista === 'semana' ? `${local?.nombre ?? ''} · semana del ${rangoSemana(lunes)}` : fechaLarga(dia)}
+        actions={
+          <>
+            {semana.guardando && (
+              <span role="status" className="hidden items-center gap-1.5 text-xs text-muted sm:flex">
+                <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                Guardando…
+              </span>
+            )}
+            {desktop ? (
+              <>
+                <Button onClick={copiarSemana} icon={<CalendarSync size={16} />} disabled={cargando}>
+                  Copiar semana anterior
+                </Button>
+                <Button variant="primary" onClick={() => setCompartir(true)} icon={<Share size={16} />} disabled={cargando || visibles.length === 0}>
+                  Compartir
+                </Button>
+              </>
+            ) : (
+              <>
+                <IconButton label="Compartir la semana" onClick={() => setCompartir(true)} disabled={cargando || visibles.length === 0}>
+                  <Share size={20} />
+                </IconButton>
+                <Menu
+                  items={menuMovil}
+                  trigger={({ toggle, ref, open }) => (
+                    <IconButton ref={ref} label="Más acciones" onClick={toggle} aria-expanded={open} className={open ? 'bg-press text-ink' : ''}>
+                      <MoreHorizontal size={20} />
+                    </IconButton>
+                  )}
+                />
+              </>
+            )}
+          </>
         }
       >
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => irASemana(addDays(lunes, -7))}
-            aria-label="Semana anterior"
-            className="flex size-11 items-center justify-center rounded-xl border border-line bg-card"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-              <path d="M15 6l-6 6 6 6" />
-            </svg>
-          </button>
-          <span className="min-w-[150px] text-center text-[15px] font-medium">Semana {rangoSemana(lunes)}</span>
-          <button
-            type="button"
-            onClick={() => irASemana(addDays(lunes, 7))}
-            aria-label="Semana siguiente"
-            className="flex size-11 items-center justify-center rounded-xl border border-line bg-card"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-              <path d="M9 6l6 6-6 6" />
-            </svg>
-          </button>
-          {lunes !== lunesDe(hoy) && (
-            <button type="button" onClick={() => irASemana(lunesDe(hoy))} className="h-11 px-2 text-sm font-medium text-olive">
-              Hoy
-            </button>
-          )}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-1">
+            <div className="flex items-center rounded-xl border border-line bg-card shadow-xs">
+              <IconButton label="Semana anterior" onClick={() => irASemana(addDays(lunes, -7))} className="rounded-r-none">
+                <ChevronLeft size={18} />
+              </IconButton>
+              <span className="min-w-[120px] border-x border-line px-2 text-center text-sm leading-[44px] font-semibold tabular-nums">
+                {rangoSemana(lunes)}
+              </span>
+              <IconButton label="Semana siguiente" onClick={() => irASemana(addDays(lunes, 7))} className="rounded-l-none">
+                <ChevronRight size={18} />
+              </IconButton>
+            </div>
+            {lunes !== lunesDe(hoy) && (
+              <Button variant="ghost" size="md" onClick={() => irASemana(lunesDe(hoy))} className="text-olive">
+                Hoy
+              </Button>
+            )}
+          </div>
+          <Segmented
+            label="Vista"
+            value={vista}
+            onChange={setVista}
+            className="max-lg:hidden"
+            options={[
+              { value: 'semana', label: 'Semana', icon: <CalendarDays size={15} /> },
+              { value: 'dia', label: 'Día por horas', icon: <Clock3 size={15} /> },
+            ]}
+          />
         </div>
 
         {vista !== 'semana' && (
-          <div className="grid grid-cols-7 gap-1.5 lg:max-w-2xl">
+          <div className="grid grid-cols-7 gap-1.5 lg:max-w-[640px]">
             {dias.map((d) => {
               const on = d === dia
+              const n = new Set(semana.asignaciones.filter((a) => a.fecha_jornada === d && !a.ausente).map((a) => a.empleado_id)).size
               return (
                 <button
                   key={d}
                   type="button"
-                  onClick={() => elegirDia(d)}
-                  aria-label={fechaLarga(d)}
+                  onClick={() => setDia(d)}
+                  aria-label={`${fechaLarga(d)}, ${n} personas`}
                   aria-pressed={on}
-                  className={`relative flex h-[54px] flex-col items-center justify-center gap-0.5 rounded-[14px] border ${
-                    on ? 'border-olive bg-olive text-white' : 'border-line bg-card text-ink'
+                  className={`relative flex h-[62px] flex-col items-center justify-center gap-0.5 rounded-2xl border transition-[background-color,border-color,transform] duration-150 active:scale-[0.95] ${
+                    on ? 'border-olive bg-olive text-white shadow-xs' : 'border-line bg-card text-ink hover:border-line-strong hover:bg-hover'
                   }`}
                 >
-                  <span className="text-xs font-medium">{DIAS_LETRA[indiceDia(d)]}</span>
-                  <span className="font-mono text-[15px] font-semibold">{numeroDia(d)}</span>
+                  <span className={`text-[11px] font-medium ${on ? 'text-white/80' : d === hoy ? 'text-olive' : 'text-muted'}`}>
+                    {DIAS_LETRA[indiceDia(d)]}
+                  </span>
+                  <span className="font-mono text-base leading-none font-semibold">{numeroDia(d)}</span>
+                  <span className={`flex items-center gap-0.5 font-mono text-[10px] ${on ? 'text-white/75' : 'text-faint'}`}>
+                    <Users size={9} aria-hidden="true" />
+                    {n}
+                  </span>
                   {d === hoy && !on && <span aria-hidden="true" className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-khaki" />}
                 </button>
               )
@@ -239,120 +317,161 @@ export function SemanaPage() {
       </PageHeader>
 
       <PageBody>
-        {cargando ? (
-          <p className="text-sm text-muted" role="status">
-            Cargando…
-          </p>
-        ) : errorCarga ? (
-          <Notice tone="error">{errorCarga}</Notice>
-        ) : visibles.length === 0 ? (
-          <div className="flex flex-col items-start gap-3 rounded-2xl border border-dashed border-line bg-card p-5">
-            <p className="m-0 text-sm text-muted">Todavía no hay empleados cargados.</p>
-            <Link to="/configuracion" className="inline-flex h-11 items-center rounded-xl bg-olive px-4 text-sm font-semibold text-white">
-              Cargar el equipo
-            </Link>
+        {errorCarga ? (
+          <EmptyState icon={<CalendarDays size={22} />} title="No pudimos cargar los horarios" description={`${errorCarga} Revisá la conexión.`} action={<Button onClick={() => semana.reload()}>Reintentar</Button>} />
+        ) : cargando ? (
+          <div className="flex flex-col gap-3" aria-busy="true" aria-label="Cargando">
+            <Skeleton className="h-10 w-full max-w-sm" />
+            <div className="flex flex-col gap-2 rounded-2xl border border-line bg-card p-4">
+              {Array.from({ length: 7 }, (_, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <Skeleton className="size-8 rounded-full" />
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-8 flex-1" />
+                </div>
+              ))}
+            </div>
           </div>
+        ) : visibles.length === 0 ? (
+          <EmptyState
+            icon={<Users size={22} />}
+            title="Todavía no cargaste a tu equipo"
+            description="Sumá a las personas en Configuración y después armás la semana desde acá."
+            action={
+              <Link to="/configuracion" className="inline-flex h-11 items-center rounded-xl bg-olive px-4 text-sm font-semibold text-white transition-colors hover:bg-olive-dark">
+                Cargar el equipo
+              </Link>
+            }
+          />
         ) : (
           <>
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            {!desktop && (
               <Segmented
                 label="Vista"
                 value={vista}
                 onChange={setVista}
                 options={[
-                  { value: 'horas', label: 'Por horas' },
-                  { value: 'lista', label: 'Lista' },
-                  ...(desktop ? [{ value: 'semana' as Vista, label: 'Semana completa' }] : []),
+                  { value: 'dia', label: 'Por horas', icon: <Clock3 size={15} /> },
+                  { value: 'lista', label: 'Asignación rápida', icon: <Rows3 size={15} /> },
                 ]}
               />
-              <div className="grid grid-cols-3 gap-1.5 lg:flex lg:gap-2">
-                <AccionBtn onClick={() => pedir('semana')} label="Copiar semana" icon="semana" />
-                <AccionBtn onClick={() => pedir('dia')} label="Copiar día anterior" icon="dia" />
-                <AccionBtn onClick={() => pedir('reset')} label="Restablecer día" icon="reset" danger />
-              </div>
-            </div>
-
-            {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
-
-            {vista !== 'semana' && (
-              <div className="grid grid-cols-[repeat(auto-fit,minmax(78px,1fr))] gap-2 lg:grid-cols-[repeat(auto-fill,minmax(170px,190px))]">
-                {resumen.map((r) => (
-                  <div
-                    key={r.key}
-                    className="flex min-w-0 flex-col items-start gap-1.5 rounded-2xl border border-line bg-card p-2.5 lg:gap-2 lg:p-3"
-                  >
-                    <span
-                      className="max-w-full truncate rounded-full border px-2 py-0.5 text-[11px] font-semibold"
-                      style={{ background: r.c.bg, color: r.c.fg, borderColor: r.c.bd }}
-                    >
-                      {r.nombre}
-                    </span>
-                    <span className="font-mono text-[22px] leading-none font-bold lg:text-[26px]">{r.n}</span>
-                    <span className="font-mono text-[10px] whitespace-nowrap text-muted lg:text-[11px]">{r.hora}</span>
-                  </div>
-                ))}
-              </div>
             )}
 
             {semana.asignaciones.length === 0 && (
-              <p className="m-0 text-sm text-muted">
-                Semana vacía. Asigná turnos tocando a cada persona, o usá <span className="font-semibold text-ink">Copiar semana</span>{' '}
-                para partir de la anterior.
-              </p>
+              <div className="flex flex-col gap-3 rounded-2xl border border-olive-line bg-olive-soft/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-semibold text-olive-darker">La semana del {rangoSemana(lunes)} está vacía</span>
+                  <span className="text-[13px] text-ink-2">
+                    {vista === 'semana' ? 'Hacé clic en un casillero para asignar' : 'Tocá a una persona para asignarle un turno'}, o partí de la semana anterior.
+                  </span>
+                </div>
+                <Button variant="primary" onClick={copiarSemana} icon={<CalendarSync size={16} />}>
+                  Copiar semana anterior
+                </Button>
+              </div>
             )}
 
-            {vista === 'horas' && <PorHoras {...vistaProps} />}
-            {vista === 'lista' && <Lista {...vistaProps} />}
+            {vista !== 'semana' && (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="no-scrollbar flex items-center gap-2 overflow-x-auto">
+                  <span className="flex items-center gap-1.5 rounded-full border border-line bg-card px-3 py-1.5 text-[13px] whitespace-nowrap shadow-xs">
+                    <Users size={14} className="text-muted" aria-hidden="true" />
+                    <span className="font-mono font-semibold">{personasDia}</span> personas
+                    <span className="text-faint">·</span>
+                    <span className="font-mono">{fmtHoras(horasTotales(turnosDelDia))}</span>
+                  </span>
+                  {resumen.map((r) => (
+                    <span
+                      key={r.key}
+                      className="flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[12px] font-medium whitespace-nowrap"
+                      style={{ background: r.c.bg, color: r.c.fg, borderColor: r.c.bd }}
+                    >
+                      {r.nombre}
+                      <span className="font-mono font-semibold">{r.n}</span>
+                    </span>
+                  ))}
+                </div>
+                {desktop && (
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => copiarDia(dia)} icon={<Copy size={15} />}>
+                      Copiar día anterior
+                    </Button>
+                    <Button size="sm" variant="danger" onClick={() => vaciarDia(dia)} icon={<Eraser size={15} />}>
+                      Vaciar día
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {vista === 'semana' && (
-              <SemanaCompleta
-                areas={areas.rows}
-                empleados={visibles}
+              <GrillaSemana
+                grupos={grupos}
                 dias={dias}
-                diaSeleccionado={dia}
+                hoy={hoy}
                 turnosDe={turnosDe}
                 horasSemana={horasSemana}
-                onCelda={(emp, fecha) => {
+                onAbrir={(emp, fecha) => {
                   setDia(fecha)
                   setEditor({ emp, fecha })
                 }}
-                onDia={elegirDia}
+                onMover={mover}
+                accionesDia={accionesDia}
               />
+            )}
+            {vista === 'dia' && (
+              <DiaPorHoras grupos={grupos} tipos={tipos} turnosDe={turnosDe} horasSemana={horasSemana} fecha={dia} onAbrir={(emp, fecha) => setEditor({ emp, fecha })} />
+            )}
+            {vista === 'lista' && (
+              <Lista
+                grupos={grupos}
+                tipos={tipos}
+                turnosDe={turnosDe}
+                horasSemana={horasSemana}
+                fecha={dia}
+                onAbrir={(emp, fecha) => setEditor({ emp, fecha })}
+                onPick={(emp, fecha, op) => setTurno(emp, fecha, op, false)}
+              />
+            )}
+
+            {vista === 'semana' && (
+              <p className="m-0 text-xs text-faint">
+                Consejo: arrastrá un turno para moverlo a otra persona o día. Con Alt (Option en Mac) lo copiás. Desde el menú ··· de cada día podés copiar el día anterior o vaciarlo.
+              </p>
             )}
           </>
         )}
       </PageBody>
 
-      <Sheet
+      <EditorTurno
         open={!!editor}
-        title={editor ? `${editor.emp.nombre} · ${fechaCorta(editor.fecha)}` : ''}
+        emp={editor?.emp ?? null}
+        fecha={editor?.fecha ?? dia}
+        turnos={editorTurnos}
+        tipos={tipos}
+        horasSemana={editor ? (horasSemana.get(editor.emp.id) ?? 0) : 0}
         onClose={() => setEditor(null)}
-      >
-        {editor && (
-          <TurnoPicker
-            key={`${editor.emp.id}-${editor.fecha}`}
-            tipos={tipos}
-            actual={turnosDe(editor.emp.id, editor.fecha)[0]}
-            onPick={(op) => {
-              asignar(editor.emp, editor.fecha, op)
-              if (op === null || 'tipo' in op) setEditor(null)
-            }}
-            onDone={() => setEditor(null)}
-          />
-        )}
-      </Sheet>
+        onSet={(op) => editor && setTurno(editor.emp, editor.fecha, op)}
+        onAdd={(op) => editor && addTurno(editor.emp, editor.fecha, op)}
+        onRemove={(id) => editor && removeTurno(editor.emp, editor.fecha, id)}
+      />
 
-      {confirmar && (
-        <ConfirmDialog
-          open
-          title={textosConfirmar[confirmar].title}
-          message={textosConfirmar[confirmar].message}
-          confirmLabel={textosConfirmar[confirmar].label}
-          danger={textosConfirmar[confirmar].danger}
-          busy={busy}
-          onConfirm={() => ejecutar(confirmar)}
-          onCancel={() => setConfirmar(null)}
-        />
-      )}
+      <ConfirmDialog
+        open={!!pendiente}
+        title={pendiente?.titulo ?? ''}
+        message={pendiente?.mensaje ?? ''}
+        confirmLabel={pendiente?.label ?? ''}
+        danger={pendiente?.danger}
+        busy={busy}
+        onConfirm={async () => {
+          if (!pendiente) return
+          setBusy(true)
+          await pendiente.run()
+          setBusy(false)
+          setPendiente(null)
+        }}
+        onCancel={() => setPendiente(null)}
+      />
 
       <Compartir
         open={compartir}
@@ -360,46 +479,12 @@ export function SemanaPage() {
         localNombre={local?.nombre ?? ''}
         lunes={lunes}
         dias={dias}
-        areas={areas.rows}
+        areas={areas}
         empleados={visibles}
         tipos={tipos}
         asignaciones={semana.asignaciones}
         turnosDe={turnosDe}
       />
     </>
-  )
-}
-
-function AccionBtn({ onClick, label, icon, danger = false }: { onClick: () => void; label: string; icon: 'semana' | 'dia' | 'reset'; danger?: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex h-[52px] flex-col items-center justify-center gap-1 rounded-xl border bg-card px-1 text-[11px] leading-tight font-semibold lg:h-11 lg:flex-row lg:gap-2 lg:px-4 lg:text-sm ${
-        danger ? 'border-danger-line text-danger hover:bg-danger-soft' : 'border-line text-ink hover:bg-head'
-      }`}
-    >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        {icon === 'semana' && (
-          <>
-            <rect x="3" y="5" width="18" height="16" rx="2" />
-            <path d="M3 10h18M8 3v4M16 3v4" />
-          </>
-        )}
-        {icon === 'dia' && (
-          <>
-            <rect x="9" y="9" width="12" height="12" rx="2" />
-            <path d="M5 15V5a2 2 0 0 1 2-2h10" />
-          </>
-        )}
-        {icon === 'reset' && (
-          <>
-            <path d="M3 12a9 9 0 1 0 3-6.7" />
-            <path d="M3 4v5h5" />
-          </>
-        )}
-      </svg>
-      <span className="text-center leading-tight">{label}</span>
-    </button>
   )
 }

@@ -17,7 +17,7 @@ export function duracion(inicio: string, fin: string): number {
 
 /** 7.5 → "7,5 h" */
 export function fmtHoras(h: number): string {
-  return `${String(Math.round(h * 10) / 10).replace('.', ',')} h`
+  return `${String(Math.round(h * 10) / 10).replace('.', ',')}\u202Fh`
 }
 
 /** "09:00:00" → "09" o "09:30" (formato corto para etiquetas) */
