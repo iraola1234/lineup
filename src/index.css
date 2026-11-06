@@ -177,6 +177,20 @@
     }
   }
 
+  /* Mientras se arrastra un turno: sin selección de texto y cursor de arrastre/copia en toda la página */
+  body.arrastrando {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  body.arrastrando,
+  body.arrastrando * {
+    cursor: grabbing !important;
+  }
+  body.arrastrando.copiando,
+  body.arrastrando.copiando * {
+    cursor: copy !important;
+  }
+
   .no-scrollbar {
     scrollbar-width: none;
   }

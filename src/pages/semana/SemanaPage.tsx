@@ -28,7 +28,7 @@ import { useIsDesktop } from '../../lib/useMedia'
 import { Compartir } from './Compartir'
 import { DiaPorHoras } from './DiaPorHoras'
 import { EditorTurno } from './EditorTurno'
-import { GrillaSemana } from './GrillaSemana'
+import { ES_MAC, GrillaSemana } from './GrillaSemana'
 import { horasTotales, porArea } from './helpers'
 import { Lista } from './Lista'
 
@@ -122,6 +122,16 @@ export function SemanaPage() {
   const removeTurno = (emp: Empleado, fecha: string, id: string) => {
     const resto = turnosDe(emp.id, fecha).filter((a) => a.id !== id).map(aFila)
     aplicar([{ desde: fecha, hasta: fecha, empleado: emp.id, filas: resto }], `${emp.nombre.split(' ')[0]} · ${fechaCorta(fecha)}: turno quitado`)
+  }
+
+  const eliminarTurno = (id: string) => {
+    const a = semana.asignaciones.find((x) => x.id === id)
+    if (!a) return
+    const resto = turnosDe(a.empleado_id, a.fecha_jornada).filter((x) => x.id !== id).map(aFila)
+    aplicar(
+      [{ desde: a.fecha_jornada, hasta: a.fecha_jornada, empleado: a.empleado_id, filas: resto }],
+      `Turno eliminado · ${(empleados.find((e) => e.id === a.empleado_id)?.nombre ?? '').split(' ')[0]} ${fechaCorta(a.fecha_jornada)}`,
+    )
   }
 
   const mover = (id: string, destino: Empleado, fecha: string, copiar: boolean) => {
@@ -416,6 +426,7 @@ export function SemanaPage() {
                   setEditor({ emp, fecha })
                 }}
                 onMover={mover}
+                onEliminar={eliminarTurno}
                 accionesDia={accionesDia}
               />
             )}
@@ -436,7 +447,7 @@ export function SemanaPage() {
 
             {vista === 'semana' && (
               <p className="m-0 text-xs text-faint">
-                Consejo: arrastrá un turno para moverlo a otra persona o día. Con Alt (Option en Mac) lo copiás. Desde el menú ··· de cada día podés copiar el día anterior o vaciarlo.
+                Arrastrá un turno para moverlo. Mantené {ES_MAC ? '⌘' : 'Ctrl'} mientras arrastrás para copiarlo, o soltalo en la papelera para eliminarlo. Desde el menú ··· de cada día podés copiar el día anterior o vaciarlo.
               </p>
             )}
           </>
