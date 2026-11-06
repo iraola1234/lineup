@@ -4,20 +4,21 @@ import { turnoColor } from '../../lib/colors'
 import { hoyISO } from '../../lib/fechas'
 import { EJE_DESDE, EJE_HORAS, HORAS_EJE, geometria, rango, type VistaProps } from './helpers'
 
-/** Posición (en %) de la hora actual sobre el eje, o null si está fuera. */
+/** Hora actual sobre el eje: posición (en %) y texto "17:15". null si está fuera del eje. */
 function useAhora(activo: boolean) {
   const calc = () => {
     const d = new Date()
     const h = (d.getHours() + d.getMinutes() / 60 - EJE_DESDE + 24) % 24
-    return h <= EJE_HORAS ? (h / EJE_HORAS) * 100 : null
+    const texto = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    return h <= EJE_HORAS ? { pos: (h / EJE_HORAS) * 100, texto } : null
   }
-  const [pos, setPos] = useState(calc)
+  const [ahora, setAhora] = useState(calc)
   useEffect(() => {
     if (!activo) return
-    const t = window.setInterval(() => setPos(calc()), 60_000)
+    const t = window.setInterval(() => setAhora(calc()), 30_000)
     return () => window.clearInterval(t)
   }, [activo])
-  return activo ? pos : null
+  return activo ? ahora : null
 }
 
 /** Un día por horas: columnas = horas (05–02), filas = personas por área. Tocar una fila abre el editor. */
@@ -39,11 +40,25 @@ export function DiaPorHoras({ grupos, turnosDe, fecha, onAbrir }: VistaProps) {
             <div className="flex gap-3 border-b border-divider px-4 pt-2 pb-1.5 lg:px-5">
               <div className="w-[104px] shrink-0 lg:w-52" />
               <div aria-hidden="true" className="relative grid min-w-0 flex-1 grid-cols-[repeat(21,minmax(0,1fr))]">
-                {HORAS_EJE.map((h, i) => (
-                  <span key={h} className={`-translate-x-1/2 font-mono text-[10px] text-faint ${i % 3 !== 0 ? 'max-lg:invisible' : ''}`}>
-                    {h}
+                {HORAS_EJE.map((h, i) => {
+                  // Las horas que quedan debajo de la etiqueta "ahora" se ocultan para que no se encimen
+                  const cerca = ahora === null ? 99 : Math.abs((i / EJE_HORAS) * 100 - ahora.pos) / (100 / EJE_HORAS)
+                  const oculto = cerca < 1.1 ? 'invisible' : i % 3 !== 0 || cerca < 3 ? 'max-lg:invisible' : ''
+                  return (
+                    <span key={h} className={`-translate-x-1/2 font-mono text-[10px] text-faint ${oculto}`}>
+                      {h}
+                    </span>
+                  )
+                })}
+                {ahora !== null && (
+                  <span
+                    className="absolute top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-danger px-1.5 py-px font-mono text-[10px] font-semibold text-white shadow-xs"
+                    style={{ left: `${ahora.pos}%` }}
+                    title="Hora actual"
+                  >
+                    {ahora.texto}
                   </span>
-                ))}
+                )}
               </div>
             </div>
 
@@ -97,7 +112,7 @@ export function DiaPorHoras({ grupos, turnosDe, fecha, onAbrir }: VistaProps) {
                       )
                     })}
                     {ahora !== null && (
-                      <span aria-hidden="true" className="pointer-events-none absolute -inset-y-3 w-px bg-danger/60" style={{ left: `${ahora}%` }} />
+                      <span aria-hidden="true" className="pointer-events-none absolute -inset-y-3 w-px bg-danger/60" style={{ left: `${ahora.pos}%` }} />
                     )}
                   </span>
                 </button>

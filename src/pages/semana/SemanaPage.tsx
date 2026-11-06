@@ -31,6 +31,7 @@ import { EditorTurno } from './EditorTurno'
 import { ES_MAC, GrillaSemana } from './GrillaSemana'
 import { horasTotales, porArea } from './helpers'
 import { Lista } from './Lista'
+import { SemanaMovil } from './SemanaMovil'
 
 type Vista = 'semana' | 'dia' | 'lista'
 type Pendiente = { titulo: string; mensaje: string; label: string; danger?: boolean; run: () => Promise<void> }
@@ -49,7 +50,6 @@ export function SemanaPage() {
   const vista: Vista = (() => {
     const v = vistaElegida ?? (desktop ? 'semana' : 'dia')
     if (desktop && v === 'lista') return 'dia'
-    if (!desktop && v === 'semana') return 'dia'
     return v
   })()
   const [editor, setEditor] = useState<{ emp: Empleado; fecha: string } | null>(null)
@@ -361,8 +361,9 @@ export function SemanaPage() {
                 value={vista}
                 onChange={setVista}
                 options={[
-                  { value: 'dia', label: 'Por horas', icon: <Clock3 size={15} /> },
-                  { value: 'lista', label: 'Asignación rápida', icon: <Rows3 size={15} /> },
+                  { value: 'dia', label: 'Día', icon: <Clock3 size={15} /> },
+                  { value: 'semana', label: 'Semana', icon: <CalendarDays size={15} /> },
+                  { value: 'lista', label: 'Rápida', icon: <Rows3 size={15} /> },
                 ]}
               />
             )}
@@ -372,7 +373,7 @@ export function SemanaPage() {
                 <div className="flex flex-col gap-0.5">
                   <span className="text-sm font-semibold text-olive-darker">La semana del {rangoSemana(lunes)} está vacía</span>
                   <span className="text-[13px] text-ink-2">
-                    {vista === 'semana' ? 'Hacé clic en un casillero para asignar' : 'Tocá a una persona para asignarle un turno'}, o partí de la semana anterior.
+                    {vista === 'semana' ? (desktop ? 'Hacé clic en un casillero para asignar' : 'Tocá un casillero para asignar') : 'Tocá a una persona para asignarle un turno'}, o partí de la semana anterior.
                   </span>
                 </div>
                 <Button variant="primary" onClick={copiarSemana} icon={<CalendarSync size={16} />}>
@@ -414,7 +415,24 @@ export function SemanaPage() {
               </div>
             )}
 
-            {vista === 'semana' && (
+            {vista === 'semana' && !desktop && (
+              <SemanaMovil
+                grupos={grupos}
+                dias={dias}
+                hoy={hoy}
+                turnosDe={turnosDe}
+                horasSemana={horasSemana}
+                onAbrir={(emp, fecha) => {
+                  setDia(fecha)
+                  setEditor({ emp, fecha })
+                }}
+                onVerDia={(fecha) => {
+                  setDia(fecha)
+                  setVista('dia')
+                }}
+              />
+            )}
+            {vista === 'semana' && desktop && (
               <GrillaSemana
                 grupos={grupos}
                 dias={dias}
@@ -445,7 +463,7 @@ export function SemanaPage() {
               />
             )}
 
-            {vista === 'semana' && (
+            {vista === 'semana' && desktop && (
               <p className="m-0 text-xs text-faint">
                 Arrastrá un turno para moverlo. Mantené {ES_MAC ? '⌘' : 'Ctrl'} mientras arrastrás para copiarlo, o soltalo en la papelera para eliminarlo. Desde el menú ··· de cada día podés copiar el día anterior o vaciarlo.
               </p>
