@@ -1,4 +1,4 @@
-import { CalendarDays, Copy, MoreHorizontal, Move, Plus, Trash2, Users } from 'lucide-react'
+import { Copy, MoreHorizontal, Move, Plus, Trash2, Users } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Avatar, Menu, type MenuItem } from '../../components/ui'
@@ -170,6 +170,7 @@ export function GrillaSemana({ grupos, dias, hoy, turnosDe, horasSemana, onAbrir
   }
   const totales = dias.map(totalDia)
   const totalSemana = totales.reduce((s, t) => s + t.horas, 0)
+  const personasSemana = new Set(grupos.flatMap((g) => g.empleados).filter((e) => dias.some((d) => turnosDe(e.id, d).some((a) => !a.ausente))).map((e) => e.id)).size
 
   const d = dragRef.current
   const enPapelera = drag?.destino === 'papelera'
@@ -189,8 +190,18 @@ export function GrillaSemana({ grupos, dias, hoy, turnosDe, horasSemana, onAbrir
           </colgroup>
           <thead>
             <tr>
-              <th className="sticky top-0 z-20 rounded-tl-2xl border-b border-line bg-head px-4 py-3 align-bottom text-xs font-medium text-muted">
-                Equipo
+              <th className="sticky top-0 z-20 rounded-tl-2xl border-b border-line bg-head px-4 pt-2.5 pb-2 text-left align-top">
+                <span className="flex flex-col gap-1">
+                  <span className="text-xs leading-6 font-medium text-muted">Equipo</span>
+                  <span className="flex items-center gap-2 font-mono text-[11px] font-normal text-muted" title="Total de la semana">
+                    <span className="font-sans font-semibold text-ink-2">Total semana</span>
+                    <span className="inline-flex items-center gap-0.5" title="Personas con turno">
+                      <Users size={11} aria-hidden="true" />
+                      {personasSemana}
+                    </span>
+                    <span className="font-semibold text-ink">{fmtHoras(totalSemana)}</span>
+                  </span>
+                </span>
               </th>
               {dias.map((dia, i) => {
                 const esHoy = dia === hoy
@@ -331,22 +342,6 @@ export function GrillaSemana({ grupos, dias, hoy, turnosDe, horasSemana, onAbrir
             </tbody>
           ))}
 
-          <tfoot>
-            <tr>
-              <th className="rounded-bl-2xl bg-foot px-4 py-3 text-left">
-                <span className="flex items-center gap-2 text-xs font-semibold text-ink-2">
-                  <CalendarDays size={14} aria-hidden="true" />
-                  Total semana
-                  <span className="font-mono font-medium text-muted">{fmtHoras(totalSemana)}</span>
-                </span>
-              </th>
-              {totales.map((t, i) => (
-                <td key={dias[i]} className="border-l border-divider bg-foot px-3 py-3 font-mono text-[11px] text-muted last:rounded-br-2xl">
-                  <span className="font-semibold text-ink">{t.personas}</span> pers · {fmtHoras(t.horas)}
-                </td>
-              ))}
-            </tr>
-          </tfoot>
         </table>
       </div>
 

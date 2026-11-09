@@ -31,7 +31,10 @@ export function SemanaMovil({ grupos, dias, hoy, turnosDe, horasSemana, onAbrir,
     <div className="overflow-hidden rounded-2xl border border-line bg-card shadow-card">
       {/* Encabezado de días: tocar uno abre ese día por horas */}
       <div className={`sticky top-0 z-10 grid ${cols} border-b border-line bg-head`}>
-        <div className="flex items-end px-2.5 pb-2 text-[10px] font-medium text-muted">Equipo</div>
+        <div className="flex flex-col justify-end gap-0.5 px-2.5 pb-1.5 leading-tight">
+          <span className="text-[10px] font-medium text-muted">Total semana</span>
+          <span className="font-mono text-[13px] font-semibold text-ink">{fmtHoras(totales.reduce((s, t) => s + t.horas, 0))}</span>
+        </div>
         {dias.map((d, i) => {
           const esHoy = d === hoy
           return (
@@ -53,6 +56,9 @@ export function SemanaMovil({ grupos, dias, hoy, turnosDe, horasSemana, onAbrir,
               <span className="flex items-center gap-0.5 font-mono text-[9px] text-faint">
                 <Users size={8} aria-hidden="true" />
                 {totales[i].personas}
+              </span>
+              <span className="font-mono text-[9px] font-semibold text-ink-2" aria-label={`${Math.round(totales[i].horas)} horas`}>
+                {Math.round(totales[i].horas)}h
               </span>
             </button>
           )
@@ -123,14 +129,6 @@ export function SemanaMovil({ grupos, dias, hoy, turnosDe, horasSemana, onAbrir,
         </section>
       ))}
 
-      <div className={`grid ${cols} border-t border-line bg-foot`}>
-        <div className="px-2.5 py-2 text-[10px] font-semibold text-ink-2">Horas</div>
-        {totales.map((t, i) => (
-          <div key={dias[i]} className="border-l border-divider py-2 text-center font-mono text-[10px] text-muted">
-            {Math.round(t.horas)}
-          </div>
-        ))}
-      </div>
     </div>
   )
 }
