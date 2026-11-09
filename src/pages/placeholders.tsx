@@ -1,20 +1,6 @@
-import { BarChart3, CircleCheckBig, Wallet } from 'lucide-react'
+import { BarChart3, Wallet } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 import { Placeholder } from '../components/Placeholder'
-
-export function CierrePage() {
-  return (
-    <>
-      <PageHeader title="Cierre del día" subtitle="Horas reales trabajadas" />
-      <Placeholder
-        icon={<CircleCheckBig size={22} />}
-        titulo="Confirmá quién trabajó y cuánto"
-        descripcion="Al final de cada jornada revisás las horas reales. Con eso se calculan las propinas y el resumen del mes."
-        items={['Corregir horas de a media hora', 'Marcar ausencias', 'Confirmar el día y reabrirlo si hace falta']}
-      />
-    </>
-  )
-}
 
 export function PropinasPage() {
   return (

@@ -44,6 +44,12 @@ export function copiarFila(a: FilaTurno | Asignacion, cambios: Partial<Pick<Fila
   return { ...aFila(a as Asignacion), horas_reales: null, ausente: false, ...cambios }
 }
 
+/** Horas que cuentan para propinas e historial: 0 si faltó, las corregidas si hay, si no las planificadas. */
+export function horasReales(a: Pick<Asignacion, 'ausente' | 'horas_reales' | 'horas_plan'>): number {
+  if (a.ausente) return 0
+  return a.horas_reales === null || a.horas_reales === undefined ? Number(a.horas_plan) : Number(a.horas_reales)
+}
+
 const enCambio = (a: Asignacion, c: Cambio) =>
   a.fecha_jornada >= c.desde && a.fecha_jornada <= c.hasta && (c.empleado === null || a.empleado_id === c.empleado)
 
@@ -60,7 +66,7 @@ export function useSemana(localId: string, lunes: string) {
   const domingo = addDays(lunes, 6)
   const key = `${localId}|${lunes}`
   const [asignaciones, setAsignacionesState] = useState<Asignacion[]>(() => cache.get(key)?.asignaciones ?? [])
-  const [cierres, setCierres] = useState<DiaCierre[]>(() => cache.get(key)?.cierres ?? [])
+  const [cierres, setCierresState] = useState<DiaCierre[]>(() => cache.get(key)?.cierres ?? [])
   const [loading, setLoading] = useState(!cache.has(key))
   const [error, setError] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
@@ -69,6 +75,12 @@ export function useSemana(localId: string, lunes: string) {
   const setAsignaciones = useCallback((next: Asignacion[]) => {
     ref.current = next
     setAsignacionesState(next)
+  }, [])
+
+  const refCierres = useRef(cierres)
+  const setCierres = useCallback((next: DiaCierre[]) => {
+    refCierres.current = next
+    setCierresState(next)
   }, [])
 
   const cola = useRef<Promise<unknown>>(Promise.resolve())
@@ -91,7 +103,32 @@ export function useSemana(localId: string, lunes: string) {
       setError(null)
     }
     setLoading(false)
-  }, [localId, lunes, domingo, key, setAsignaciones])
+  }, [localId, lunes, domingo, key, setAsignaciones, setCierres])
+
+  /** Pone un guardado en la cola (uno por vez, en orden). Al vaciarse la cola se relee la base. */
+  const encolar = useCallback(
+    (tarea: () => Promise<boolean>): Promise<boolean> => {
+      pendientes.current++
+      setGuardando(true)
+      const p = cola.current.then(async () => {
+        let ok = false
+        try {
+          ok = await tarea()
+        } catch {
+          ok = false
+        }
+        pendientes.current--
+        if (pendientes.current === 0) {
+          setGuardando(false)
+          await reload() // sincroniza ids reales y cierres (y deshace lo que no se pudo guardar)
+        }
+        return ok
+      })
+      cola.current = p
+      return p
+    },
+    [reload],
+  )
 
   useEffect(() => {
     const c = cache.get(key)
@@ -99,7 +136,7 @@ export function useSemana(localId: string, lunes: string) {
     setCierres(c?.cierres ?? [])
     setLoading(!c)
     reload()
-  }, [key, reload, setAsignaciones])
+  }, [key, reload, setAsignaciones, setCierres])
 
   /**
    * Aplica cambios: actualiza la pantalla ya mismo y los guarda en orden.
@@ -122,37 +159,62 @@ export function useSemana(localId: string, lunes: string) {
         ]
       }
       setAsignaciones(estado)
-      cache.set(key, { asignaciones: estado, cierres })
+      // Cambiar turnos reabre los días tocados (igual que hace la base)
+      const cierresNuevos = refCierres.current.map((c) =>
+        cambios.some((x) => c.fecha >= x.desde && c.fecha <= x.hasta) ? { ...c, confirmado: false } : c,
+      )
+      setCierres(cierresNuevos)
+      cache.set(key, { asignaciones: estado, cierres: cierresNuevos })
 
-      pendientes.current++
-      setGuardando(true)
-      const guardado = (cola.current = cola.current.then(async () => {
-        let ok = true
-        if (supabase) {
-          for (const c of cambios) {
-            const { error } = await supabase.rpc('reemplazar_turnos', {
-              p_local: localId,
-              p_desde: c.desde,
-              p_hasta: c.hasta,
-              p_empleado: c.empleado,
-              p_filas: c.filas,
-            })
-            if (error) {
-              ok = false
-              break
-            }
-          }
+      const guardado = encolar(async () => {
+        if (!supabase) return true
+        for (const c of cambios) {
+          const { error } = await supabase.rpc('reemplazar_turnos', {
+            p_local: localId,
+            p_desde: c.desde,
+            p_hasta: c.hasta,
+            p_empleado: c.empleado,
+            p_filas: c.filas,
+          })
+          if (error) return false
         }
-        pendientes.current--
-        if (pendientes.current === 0) {
-          setGuardando(false)
-          await reload() // sincroniza ids reales y cierres
-        }
-        return ok
-      }) as Promise<boolean>)
+        return true
+      })
       return { deshacer, guardado }
     },
-    [localId, key, cierres, reload, setAsignaciones],
+    [localId, key, encolar, setAsignaciones, setCierres],
+  )
+
+  /** Corrige las horas reales o la ausencia de un turno ya cargado (cierre del día). */
+  const actualizar = useCallback(
+    (id: string, cambio: Partial<Pick<Asignacion, 'horas_reales' | 'ausente'>>): Promise<boolean> => {
+      if (id.startsWith('tmp-')) return Promise.resolve(false)
+      const estado = ref.current.map((a) => (a.id === id ? { ...a, ...cambio } : a))
+      setAsignaciones(estado)
+      cache.set(key, { asignaciones: estado, cierres: refCierres.current })
+      return encolar(async () => {
+        if (!supabase) return true
+        const { error } = await supabase.from('asignaciones').update(cambio).eq('id', id)
+        return !error
+      })
+    },
+    [key, encolar, setAsignaciones],
+  )
+
+  /** Confirma o reabre un día. */
+  const confirmarDia = useCallback(
+    (fecha: string, confirmado: boolean): Promise<boolean> => {
+      const fila: DiaCierre = { local_id: localId, fecha, confirmado, confirmado_en: confirmado ? new Date().toISOString() : null }
+      const next = [...refCierres.current.filter((c) => c.fecha !== fecha), fila]
+      setCierres(next)
+      cache.set(key, { asignaciones: ref.current, cierres: next })
+      return encolar(async () => {
+        if (!supabase) return true
+        const { error } = await supabase.from('dias_cierre').upsert(fila, { onConflict: 'local_id,fecha' })
+        return !error
+      })
+    },
+    [localId, key, encolar, setCierres],
   )
 
   /** Lee turnos de un rango fuera de la semana cargada (para copiar). */
@@ -170,5 +232,5 @@ export function useSemana(localId: string, lunes: string) {
     [localId],
   )
 
-  return { asignaciones, cierres, loading, error, guardando, reload, aplicar, leerRango, domingo }
+  return { asignaciones, cierres, loading, error, guardando, reload, aplicar, actualizar, confirmarDia, leerRango, domingo }
 }

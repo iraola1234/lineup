@@ -7,7 +7,8 @@ import { LocalProvider, useLocal } from './lib/local'
 import { ConfiguracionPage } from './pages/configuracion/ConfiguracionPage'
 import { LoginPage } from './pages/LoginPage'
 import { OnboardingPage } from './pages/OnboardingPage'
-import { CierrePage, MesPage, PropinasPage } from './pages/placeholders'
+import { CierrePage } from './pages/cierre/CierrePage'
+import { MesPage, PropinasPage } from './pages/placeholders'
 import { SemanaPage } from './pages/semana/SemanaPage'
 
 function Splash() {

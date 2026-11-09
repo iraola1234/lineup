@@ -59,3 +59,9 @@ export function rangoSemana(lunes: string): string {
   if (a.getMonth() === b.getMonth()) return `${a.getDate()} – ${b.getDate()} ${MESES_ABR[b.getMonth()]}`
   return `${a.getDate()} ${MESES_ABR[a.getMonth()]} – ${b.getDate()} ${MESES_ABR[b.getMonth()]}`
 }
+
+/** Jornada en curso: hasta las 6 de la mañana se sigue cerrando el día anterior. */
+export function jornadaActual(): string {
+  const d = new Date()
+  return d.getHours() < 6 ? addDays(toISO(d), -1) : toISO(d)
+}

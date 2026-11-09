@@ -42,6 +42,7 @@ export type DiaCierre = {
   local_id: string
   fecha: string
   confirmado: boolean
+  confirmado_en: string | null
 }
 
 /** Qué asignarle a una persona en un día: un tipo de turno, un horario a mano, o nada (libre). */
