@@ -8,7 +8,8 @@ import { ConfiguracionPage } from './pages/configuracion/ConfiguracionPage'
 import { LoginPage } from './pages/LoginPage'
 import { OnboardingPage } from './pages/OnboardingPage'
 import { CierrePage } from './pages/cierre/CierrePage'
-import { MesPage, PropinasPage } from './pages/placeholders'
+import { MesPage } from './pages/mes/MesPage'
+import { PropinasPage } from './pages/placeholders'
 import { SemanaPage } from './pages/semana/SemanaPage'
 
 function Splash() {
