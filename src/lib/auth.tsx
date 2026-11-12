@@ -40,6 +40,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!supabase) return 'La app todavía no está conectada a la base de datos.'
     const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } })
     if (error) {
+      if (error.code === 'signup_disabled' || /signups? not allowed/i.test(error.message))
+        return 'Por ahora las cuentas las crea el administrador. Pedile tu usuario y contraseña, y entrá con "Entrar".'
       if (/password/i.test(error.message)) return 'La contraseña tiene que tener al menos 6 caracteres.'
       if (/registered|exists/i.test(error.message)) return 'Ese email ya tiene cuenta. Entrá con tu contraseña.'
       return 'No se pudo crear la cuenta. Probá de nuevo.'
