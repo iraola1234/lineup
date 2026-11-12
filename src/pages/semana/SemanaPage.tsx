@@ -38,7 +38,8 @@ type Pendiente = { titulo: string; mensaje: string; label: string; danger?: bool
 
 export function SemanaPage() {
   const localId = useLocalId()
-  const { local } = useLocal()
+  const { local, esAdmin } = useLocal()
+  const soloLectura = !esAdmin
   const { areas, empleados, tiposActivos: tipos, loading: cargandoDatos, error: errorDatos } = useData()
   const desktop = useIsDesktop()
   const toast = useToast()
@@ -49,7 +50,7 @@ export function SemanaPage() {
   const [vistaElegida, setVista] = useState<Vista | null>(null)
   const vista: Vista = (() => {
     const v = vistaElegida ?? (desktop ? 'semana' : 'dia')
-    if (desktop && v === 'lista') return 'dia'
+    if ((desktop || soloLectura) && v === 'lista') return 'dia'
     return v
   })()
   const [editor, setEditor] = useState<{ emp: Empleado; fecha: string } | null>(null)
@@ -238,9 +239,11 @@ export function SemanaPage() {
             )}
             {desktop ? (
               <>
-                <Button onClick={copiarSemana} icon={<CalendarSync size={16} />} disabled={cargando}>
-                  Copiar semana anterior
-                </Button>
+                {!soloLectura && (
+                  <Button onClick={copiarSemana} icon={<CalendarSync size={16} />} disabled={cargando}>
+                    Copiar semana anterior
+                  </Button>
+                )}
                 <Button variant="primary" onClick={() => setCompartir(true)} icon={<Share size={16} />} disabled={cargando || visibles.length === 0}>
                   Compartir
                 </Button>
@@ -250,14 +253,14 @@ export function SemanaPage() {
                 <IconButton label="Compartir la semana" onClick={() => setCompartir(true)} disabled={cargando || visibles.length === 0}>
                   <Share size={20} />
                 </IconButton>
-                <Menu
+                {!soloLectura && <Menu
                   items={menuMovil}
                   trigger={({ toggle, ref, open }) => (
                     <IconButton ref={ref} label="Más acciones" onClick={toggle} aria-expanded={open} className={open ? 'bg-press text-ink' : ''}>
                       <MoreHorizontal size={20} />
                     </IconButton>
                   )}
-                />
+                />}
               </>
             )}
           </>
@@ -363,7 +366,7 @@ export function SemanaPage() {
                 options={[
                   { value: 'dia', label: 'Día', icon: <Clock3 size={15} /> },
                   { value: 'semana', label: 'Semana', icon: <CalendarDays size={15} /> },
-                  { value: 'lista', label: 'Rápida', icon: <Rows3 size={15} /> },
+                  ...(soloLectura ? [] : [{ value: 'lista' as const, label: 'Rápida', icon: <Rows3 size={15} /> }]),
                 ]}
               />
             )}
@@ -373,12 +376,16 @@ export function SemanaPage() {
                 <div className="flex flex-col gap-0.5">
                   <span className="text-sm font-semibold text-olive-darker">La semana del {rangoSemana(lunes)} está vacía</span>
                   <span className="text-[13px] text-ink-2">
-                    {vista === 'semana' ? (desktop ? 'Hacé clic en un casillero para asignar' : 'Tocá un casillero para asignar') : 'Tocá a una persona para asignarle un turno'}, o partí de la semana anterior.
+                    {soloLectura
+                      ? 'Todavía no se cargaron los horarios de esta semana.'
+                      : `${vista === 'semana' ? (desktop ? 'Hacé clic en un casillero para asignar' : 'Tocá un casillero para asignar') : 'Tocá a una persona para asignarle un turno'}, o partí de la semana anterior.`}
                   </span>
                 </div>
-                <Button variant="primary" onClick={copiarSemana} icon={<CalendarSync size={16} />}>
-                  Copiar semana anterior
-                </Button>
+                {!soloLectura && (
+                  <Button variant="primary" onClick={copiarSemana} icon={<CalendarSync size={16} />}>
+                    Copiar semana anterior
+                  </Button>
+                )}
               </div>
             )}
 
@@ -426,6 +433,7 @@ export function SemanaPage() {
                   setDia(fecha)
                   setEditor({ emp, fecha })
                 }}
+                soloLectura={soloLectura}
                 onVerDia={(fecha) => {
                   setDia(fecha)
                   setVista('dia')
@@ -446,10 +454,11 @@ export function SemanaPage() {
                 onMover={mover}
                 onEliminar={eliminarTurno}
                 accionesDia={accionesDia}
+                soloLectura={soloLectura}
               />
             )}
             {vista === 'dia' && (
-              <DiaPorHoras grupos={grupos} tipos={tipos} turnosDe={turnosDe} horasSemana={horasSemana} fecha={dia} onAbrir={(emp, fecha) => setEditor({ emp, fecha })} />
+              <DiaPorHoras grupos={grupos} tipos={tipos} turnosDe={turnosDe} horasSemana={horasSemana} fecha={dia} onAbrir={(emp, fecha) => setEditor({ emp, fecha })} soloLectura={soloLectura} />
             )}
             {vista === 'lista' && (
               <Lista
@@ -463,7 +472,7 @@ export function SemanaPage() {
               />
             )}
 
-            {vista === 'semana' && desktop && (
+            {vista === 'semana' && desktop && !soloLectura && (
               <p className="m-0 text-xs text-faint">
                 Arrastrá un turno para moverlo. Mantené {ES_MAC ? '⌘' : 'Ctrl'} mientras arrastrás para copiarlo, o soltalo en la papelera para eliminarlo. Desde el menú ··· de cada día podés copiar el día anterior o vaciarlo.
               </p>

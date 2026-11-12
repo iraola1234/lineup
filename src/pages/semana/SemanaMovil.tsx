@@ -13,13 +13,14 @@ type Props = {
   horasSemana: Map<string, number>
   onAbrir: (emp: Empleado, fecha: string) => void
   onVerDia: (fecha: string) => void
+  soloLectura?: boolean
 }
 
 /**
  * Celular: la semana completa en una pantalla. Filas = personas, columnas = días.
  * Cada casillero muestra entrada y salida con el color del turno; tocarlo abre el editor.
  */
-export function SemanaMovil({ grupos, dias, hoy, turnosDe, horasSemana, onAbrir, onVerDia }: Props) {
+export function SemanaMovil({ grupos, dias, hoy, turnosDe, horasSemana, onAbrir, onVerDia, soloLectura = false }: Props) {
   const todos = grupos.flatMap((g) => g.empleados)
   const totales = dias.map((d) => {
     const t = todos.flatMap((e) => turnosDe(e.id, d))
@@ -88,11 +89,12 @@ export function SemanaMovil({ grupos, dias, hoy, turnosDe, horasSemana, onAbrir,
                     <button
                       key={d}
                       type="button"
+                      disabled={soloLectura}
                       onClick={() => onAbrir(e, d)}
                       aria-label={`${e.nombre}, ${fechaCorta(d)}: ${
                         turnos.length ? turnos.map((a) => `${a.nombre_turno} ${rango(a)}`).join(', ') : 'libre'
                       }`}
-                      className={`flex min-h-12 flex-col gap-0.5 border-l border-divider p-[3px] transition-colors active:bg-press ${
+                      className={`flex min-h-12 flex-col gap-0.5 border-l border-divider p-[3px] transition-colors enabled:active:bg-press disabled:cursor-default ${
                         d === hoy ? 'bg-olive-soft/40' : ''
                       }`}
                     >

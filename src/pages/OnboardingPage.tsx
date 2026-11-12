@@ -4,10 +4,11 @@ import { Button, Field, Notice, TextInput } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import { useLocal } from '../lib/local'
 
-/** Primera vez que entra un encargado sin local: pide el nombre y lo crea. */
+/** Primera vez que entra alguien sin local: lo crea (dueño) o espera la invitación (encargado). */
 export function OnboardingPage() {
-  const { crearLocal } = useLocal()
-  const { signOut } = useAuth()
+  const { crearLocal, recargar } = useLocal()
+  const { signOut, session } = useAuth()
+  const [revisando, setRevisando] = useState(false)
   const [nombre, setNombre] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -27,6 +28,24 @@ export function OnboardingPage() {
       <div className="flex flex-col gap-2">
         <h1 className="m-0 text-[28px] leading-tight font-semibold tracking-[-0.02em]">Bienvenido. ¿Cómo se llama el restaurante?</h1>
         <p className="m-0 text-sm text-muted">Vamos a dejar todo listo para que armes tu primera semana.</p>
+      </div>
+      <div className="flex flex-col gap-3 rounded-2xl border border-line bg-card p-4 text-[13px] text-ink-2 shadow-card">
+        <p className="m-0">
+          <span className="font-semibold text-ink">¿Sos encargado?</span> No crees un local nuevo: pedile al administrador que te invite con{' '}
+          <span className="font-medium text-ink">{session?.user.email}</span> y después tocá revisar.
+        </p>
+        <Button
+          size="sm"
+          loading={revisando}
+          onClick={async () => {
+            setRevisando(true)
+            await recargar()
+            setRevisando(false)
+          }}
+          className="self-start"
+        >
+          Revisar invitación
+        </Button>
       </div>
       <form onSubmit={onSubmit} className="flex flex-col gap-4">
         <Field label="Nombre del local">

@@ -22,7 +22,7 @@ function useAhora(activo: boolean) {
 }
 
 /** Un día por horas: columnas = horas (05–02), filas = personas por área. Tocar una fila abre el editor. */
-export function DiaPorHoras({ grupos, turnosDe, fecha, onAbrir }: VistaProps) {
+export function DiaPorHoras({ grupos, turnosDe, fecha, onAbrir, soloLectura = false }: VistaProps) {
   const ahora = useAhora(fecha === hoyISO())
 
   return (
@@ -69,9 +69,10 @@ export function DiaPorHoras({ grupos, turnosDe, fecha, onAbrir }: VistaProps) {
                 <button
                   key={e.id}
                   type="button"
+                  disabled={soloLectura}
                   onClick={() => onAbrir(e, fecha)}
-                  aria-label={`${e.nombre}: ${resumen}. Editar turno`}
-                  className={`group flex h-14 w-full items-center gap-3 px-4 text-left transition-colors hover:bg-head active:bg-hover lg:px-5 ${
+                  aria-label={`${e.nombre}: ${resumen}${soloLectura ? '' : '. Editar turno'}`}
+                  className={`group flex h-14 w-full items-center gap-3 px-4 text-left transition-colors enabled:hover:bg-head enabled:active:bg-hover disabled:cursor-default lg:px-5 ${
                     idx > 0 ? 'border-t border-divider' : ''
                   }`}
                 >

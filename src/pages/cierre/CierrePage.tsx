@@ -1,35 +1,54 @@
-import { Check, ChevronLeft, ChevronRight, CircleCheckBig, Loader2, LockOpen, Minus, Plus, RotateCcw, UserCheck, UserX, Users } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { Check, ChevronDown, ChevronLeft, ChevronRight, CircleCheckBig, Loader2, LockOpen, Moon, Sun, Users } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageBody, PageHeader } from '../../components/PageHeader'
 import { useToast } from '../../components/toast'
-import { Avatar, Button, EmptyState, IconButton, Notice, Pill, Skeleton, pillDanger, pillNeutral, pillOk, pillWarn } from '../../components/ui'
-import { turnoColor } from '../../lib/colors'
+import { Button, EmptyState, IconButton, Notice, Pill, Skeleton } from '../../components/ui'
+import { useAuth } from '../../lib/auth'
 import { useData } from '../../lib/data'
+import { claveDivision, nombreDivision, todasLasDivisiones } from '../../lib/divisiones'
 import { DIAS, DIAS_LETRA, addDays, diasDeSemana, fechaCorta, fechaLarga, indiceDia, jornadaActual, lunesDe, numeroDia, rangoSemana } from '../../lib/fechas'
-import { useLocalId } from '../../lib/local'
+import { useLocal, useLocalId } from '../../lib/local'
 import { horasReales, useSemana } from '../../lib/semana'
-import { fmtHoras, toHours } from '../../lib/time'
-import type { Asignacion, Empleado } from '../../lib/types'
-import { rango } from '../semana/helpers'
+import { supabase } from '../../lib/supabase'
+import { fmtHoras } from '../../lib/time'
+import type { Asignacion, CierreDivision, Division, Empleado } from '../../lib/types'
+import { Dato, ESTADO_PILL, EstadoIcono, EstadoMini, FilaCierre, horaDe, ordenEntrada, sinUnidad, type Estado } from './piezas'
 
-type Estado = 'sin' | 'futuro' | 'pendiente' | 'confirmado'
-
-const ESTADO_PILL: Record<Estado, { label: string; tono: typeof pillOk }> = {
-  sin: { label: 'Sin turnos', tono: pillNeutral },
-  futuro: { label: 'Todavía no', tono: pillNeutral },
-  pendiente: { label: 'Pendiente', tono: pillWarn },
-  confirmado: { label: 'Confirmado', tono: pillOk },
+type Div = {
+  clave: string
+  division: Division
+  nombre: string
+  turnos: Asignacion[]
+  estado: Estado
+  cierre: CierreDivision | undefined
+  mia: boolean
+  personas: number
+  presentes: number
+  plan: number
+  reales: number
 }
 
-/** Orden por hora de entrada, siguiendo el día de trabajo (05:00 → 04:59). */
-const ordenEntrada = (a: Asignacion) => (toHours(a.inicio_plan) - 5 + 24) % 24
-const sinUnidad = (h: number) => fmtHoras(h).replace(' h', '')
-const horaDe = (iso: string) => new Date(iso).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit', hour12: false })
+const sumar = (turnos: Asignacion[]) => ({
+  personas: new Set(turnos.map((a) => a.empleado_id)).size,
+  presentes: new Set(turnos.filter((a) => !a.ausente).map((a) => a.empleado_id)).size,
+  plan: turnos.reduce((s, a) => s + Number(a.horas_plan), 0),
+  reales: turnos.reduce((s, a) => s + horasReales(a), 0),
+})
+
+/** Estado del día mirando solo las divisiones que importan (las del encargado, o todas para el admin). */
+function estadoDia(divs: Div[]): Estado {
+  if (divs.length === 0) return 'sin'
+  if (divs.every((d) => d.estado === 'confirmado')) return 'confirmado'
+  if (divs.some((d) => d.estado === 'pendiente')) return 'pendiente'
+  return 'futuro'
+}
 
 export function CierrePage() {
   const localId = useLocalId()
-  const { empleados, loading: cargandoDatos, error: errorDatos } = useData()
+  const { esAdmin, puedoCerrar } = useLocal()
+  const { session } = useAuth()
+  const { areas, empleados, loading: cargandoDatos, error: errorDatos } = useData()
   const toast = useToast()
 
   const hoy = jornadaActual()
@@ -37,37 +56,54 @@ export function CierrePage() {
   const [dia, setDia] = useState(hoy)
   const semana = useSemana(localId, lunes)
   const dias = diasDeSemana(lunes)
+  const [abiertas, setAbiertas] = useState<Set<string>>(new Set())
+  const [nombres, setNombres] = useState<Map<string, string>>(new Map())
+
+  // El admin ve quién confirmó cada división
+  useEffect(() => {
+    if (!esAdmin || !supabase) return
+    supabase
+      .from('miembros')
+      .select('usuario_id, nombre, email')
+      .eq('local_id', localId)
+      .then(({ data }) => setNombres(new Map((data ?? []).map((m) => [m.usuario_id as string, ((m.nombre as string) || (m.email as string) || '').split(' ')[0]]))))
+  }, [esAdmin, localId])
 
   const empPorId = useMemo(() => new Map(empleados.map((e) => [e.id, e])), [empleados])
+  const divisiones = useMemo(() => todasLasDivisiones(areas), [areas])
 
-  const resumen = useMemo(
+  const semanaDivs = useMemo(
     () =>
-      dias.map((d) => {
-        const turnos = semana.asignaciones
-          .filter((a) => a.fecha_jornada === d)
-          .sort((a, b) => ordenEntrada(a) - ordenEntrada(b) || (empPorId.get(a.empleado_id)?.nombre ?? '').localeCompare(empPorId.get(b.empleado_id)?.nombre ?? ''))
-        const cierre = semana.cierres.find((c) => c.fecha === d)
-        const estado: Estado = turnos.length === 0 ? 'sin' : cierre?.confirmado ? 'confirmado' : d > hoy ? 'futuro' : 'pendiente'
-        const personas = new Set(turnos.map((a) => a.empleado_id))
-        const presentes = new Set(turnos.filter((a) => !a.ausente).map((a) => a.empleado_id))
-        return {
-          fecha: d,
-          turnos,
-          estado,
-          confirmadoEn: cierre?.confirmado ? (cierre.confirmado_en ?? null) : null,
-          personas: personas.size,
-          presentes: presentes.size,
-          plan: turnos.reduce((s, a) => s + Number(a.horas_plan), 0),
-          reales: turnos.reduce((s, a) => s + horasReales(a), 0),
-        }
+      dias.map((fecha) => {
+        const delDia = semana.asignaciones.filter((a) => a.fecha_jornada === fecha)
+        const divs: Div[] = divisiones
+          .map((division) => {
+            const turnos = delDia
+              .filter((a) => empPorId.get(a.empleado_id)?.area_id === division.area_id && a.momento === division.momento)
+              .sort((a, b) => ordenEntrada(a) - ordenEntrada(b) || (empPorId.get(a.empleado_id)?.nombre ?? '').localeCompare(empPorId.get(b.empleado_id)?.nombre ?? ''))
+            const cierre = semana.cierres.find((c) => c.fecha === fecha && c.area_id === division.area_id && c.momento === division.momento)
+            const estado: Estado = cierre?.confirmado ? 'confirmado' : fecha > hoy ? 'futuro' : 'pendiente'
+            return {
+              clave: claveDivision(division),
+              division,
+              nombre: nombreDivision(areas, division),
+              turnos,
+              estado,
+              cierre,
+              mia: puedoCerrar(division.area_id, division.momento),
+              ...sumar(turnos),
+            }
+          })
+          .filter((d) => d.turnos.length > 0)
+        // Primero las propias
+        divs.sort((a, b) => Number(b.mia) - Number(a.mia))
+        const relevantes = esAdmin ? divs : divs.filter((d) => d.mia)
+        return { fecha, divs, relevantes, estado: estadoDia(relevantes), ...sumar(delDia) }
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [semana.asignaciones, semana.cierres, lunes, hoy, empPorId],
+    [semana.asignaciones, semana.cierres, lunes, hoy, empPorId, divisiones, areas, esAdmin, puedoCerrar],
   )
-  const actual = resumen.find((r) => r.fecha === dia) ?? resumen[0]
-  const editable = actual.estado === 'pendiente'
-  const cerrados = resumen.filter((r) => r.estado === 'confirmado').length
-  const aCerrar = resumen.filter((r) => r.estado === 'confirmado' || r.estado === 'pendiente').length
+  const actual = semanaDivs.find((d) => d.fecha === dia) ?? semanaDivs[0]
 
   const irASemana = (l: string) => {
     setLunes(l)
@@ -75,7 +111,7 @@ export function CierrePage() {
   }
 
   const avisarError = (ok: boolean) => {
-    if (!ok) toast.show('No se pudo guardar. Revisá la conexión y probá de nuevo.', { tone: 'error' })
+    if (!ok) toast.show('No se pudo guardar. Revisá la conexión, o puede que otro encargado haya confirmado.', { tone: 'error' })
   }
 
   const cambiarHoras = (a: Asignacion, h: number) => {
@@ -91,22 +127,30 @@ export function CierrePage() {
     })
   }
 
-  const confirmar = () => {
-    const fecha = actual.fecha
-    semana.confirmarDia(fecha, true).then(avisarError)
-    toast.show(`${fechaCorta(fecha)} confirmado · ${fmtHoras(actual.reales)}`, {
-      action: { label: 'Deshacer', onClick: () => semana.confirmarDia(fecha, false).then(avisarError) },
+  const confirmar = (d: Div) => {
+    const { fecha } = actual
+    const { area_id, momento } = d.division
+    semana.confirmarDivision(fecha, area_id, momento, true).then(avisarError)
+    toast.show(`${d.nombre} · ${fechaCorta(fecha)} confirmado (${fmtHoras(d.reales)})`, {
+      action: { label: 'Deshacer', onClick: () => semana.confirmarDivision(fecha, area_id, momento, false).then(avisarError) },
     })
   }
 
-  const reabrir = () => {
-    const fecha = actual.fecha
-    semana.confirmarDia(fecha, false).then(avisarError)
-    toast.show(`${fechaCorta(fecha)} reabierto: ya podés corregir horas`)
+  const reabrir = (d: Div) => {
+    semana.confirmarDivision(actual.fecha, d.division.area_id, d.division.momento, false).then(avisarError)
+    toast.show(`${d.nombre} reabierto: ya podés corregir horas`)
+  }
+
+  const quien = (c: CierreDivision | undefined) => {
+    if (!c?.confirmado) return null
+    const hora = c.confirmado_en ? `a las ${horaDe(c.confirmado_en)}` : ''
+    const por = c.confirmado_por === session?.user.id ? 'vos' : c.confirmado_por ? nombres.get(c.confirmado_por) : null
+    return [hora, por ? `por ${por}` : ''].filter(Boolean).join(' ')
   }
 
   const cargando = cargandoDatos || semana.loading
   const errorCarga = errorDatos ?? semana.error
+  const confirmadasHoy = actual.relevantes.filter((d) => d.estado === 'confirmado').length
 
   return (
     <>
@@ -141,7 +185,7 @@ export function CierrePage() {
 
         {/* Celular: tira de días con su estado */}
         <div className="grid grid-cols-7 gap-1.5 lg:hidden">
-          {resumen.map((r) => {
+          {semanaDivs.map((r) => {
             const on = r.fecha === dia
             return (
               <button
@@ -190,22 +234,19 @@ export function CierrePage() {
             <aside aria-label="Días de la semana" className="hidden overflow-hidden rounded-2xl border border-line bg-card shadow-card lg:block">
               <div className="flex items-center justify-between border-b border-line bg-head px-4 py-3">
                 <h2 className="m-0 text-[13px] font-semibold">Semana</h2>
-                <span className="font-mono text-[11px] text-muted">
-                  {cerrados}/{aCerrar} cerrados
-                </span>
+                <span className="text-[11px] text-muted">{esAdmin ? 'Todas las divisiones' : 'Tus divisiones'}</span>
               </div>
               <ul className="m-0 flex list-none flex-col gap-0.5 p-1.5">
-                {resumen.map((r) => {
+                {semanaDivs.map((r) => {
                   const on = r.fecha === dia
+                  const listas = r.relevantes.filter((d) => d.estado === 'confirmado').length
                   return (
                     <li key={r.fecha}>
                       <button
                         type="button"
                         onClick={() => setDia(r.fecha)}
                         aria-pressed={on}
-                        className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors ${
-                          on ? 'bg-olive-soft' : 'hover:bg-hover active:bg-press'
-                        }`}
+                        className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors ${on ? 'bg-olive-soft' : 'hover:bg-hover active:bg-press'}`}
                       >
                         <span
                           className={`flex size-10 shrink-0 flex-col items-center justify-center rounded-xl border leading-none ${
@@ -223,7 +264,7 @@ export function CierrePage() {
                             {r.fecha === hoy && <span className="ml-1.5 text-[11px] font-medium text-olive">Hoy</span>}
                           </span>
                           <span className="font-mono text-[11px] text-muted">
-                            {r.personas === 0 ? '—' : `${r.presentes} pers. · ${fmtHoras(r.reales)}`}
+                            {r.relevantes.length === 0 ? '—' : `${listas}/${r.relevantes.length} confirmadas · ${fmtHoras(r.relevantes.reduce((s, d) => s + d.reales, 0))}`}
                           </span>
                         </span>
                         <EstadoIcono estado={r.estado} />
@@ -244,31 +285,48 @@ export function CierrePage() {
                       {actual.estado === 'confirmado' && <Check size={11} strokeWidth={2.6} aria-hidden="true" />}
                       {ESTADO_PILL[actual.estado].label}
                     </Pill>
-                    {actual.confirmadoEn && <span className="font-mono text-[11px] text-muted">a las {horaDe(actual.confirmadoEn)}</span>}
                   </div>
-                  <div className="hidden lg:block">
-                    <AccionDia estado={actual.estado} horas={actual.reales} onConfirmar={confirmar} onReabrir={reabrir} />
-                  </div>
+                  {actual.relevantes.length > 0 && (
+                    <span className="text-[12px] text-muted">
+                      {confirmadasHoy} de {actual.relevantes.length} {esAdmin ? 'divisiones confirmadas' : actual.relevantes.length === 1 ? 'confirmada' : 'confirmadas'}
+                    </span>
+                  )}
                 </div>
                 <dl className="m-0 mt-4 grid grid-cols-3 gap-2 lg:max-w-[560px]">
                   <Dato titulo="Trabajaron" valor={`${actual.presentes}/${actual.personas}`} />
                   <Dato titulo="Horas reales" valor={sinUnidad(actual.reales)} unidad="h" destacado={actual.reales !== actual.plan} />
                   <Dato titulo="Planificadas" valor={sinUnidad(actual.plan)} unidad="h" />
                 </dl>
+                {actual.divs.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {actual.divs.map((d) => (
+                      <span
+                        key={d.clave}
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-medium ${
+                          d.estado === 'confirmado' ? 'border-tarde-bd bg-tarde-bg text-tarde-fg' : d.estado === 'pendiente' ? 'border-warn-line bg-warn-soft text-warn' : 'border-line bg-foot text-muted'
+                        }`}
+                      >
+                        {d.division.momento === 'noche' ? <Moon size={12} aria-hidden="true" /> : <Sun size={12} aria-hidden="true" />}
+                        {d.nombre}
+                        {d.estado === 'confirmado' && <Check size={12} strokeWidth={2.6} aria-label="confirmada" />}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </section>
 
-              {actual.estado === 'futuro' && (
+              {actual.estado === 'futuro' && actual.relevantes.length > 0 && (
                 <Notice tone="info">Este día todavía no llegó. Vas a poder corregir horas y confirmarlo a partir del {fechaLarga(actual.fecha).toLowerCase()}.</Notice>
               )}
-              {actual.estado === 'confirmado' && (
-                <Notice tone="ok">Día cerrado. Para corregir algo, reabrilo. Si cambiás un turno desde Horarios, el día se reabre solo.</Notice>
+              {!esAdmin && actual.divs.length > 0 && actual.relevantes.length === 0 && (
+                <Notice tone="info">Este día no hay turnos en tu división. Abajo podés ver cómo van las demás.</Notice>
               )}
 
-              {actual.turnos.length === 0 ? (
+              {actual.divs.length === 0 ? (
                 <EmptyState
                   icon={<Users size={22} />}
                   title="Nadie tenía turno este día"
-                  description="Cuando cargues turnos en Horarios, acá vas a poder confirmar quién vino y cuántas horas hizo."
+                  description="Cuando haya turnos cargados en Horarios, acá se confirma quién vino y cuántas horas hizo."
                   action={
                     <Link
                       to="/"
@@ -279,221 +337,105 @@ export function CierrePage() {
                   }
                 />
               ) : (
-                <section aria-label="Quiénes trabajaron" className="overflow-hidden rounded-2xl border border-line bg-card shadow-card">
-                  <div className="flex items-center justify-between border-b border-line bg-head px-4 py-2.5 lg:px-5">
-                    <h3 className="m-0 text-[12px] font-semibold tracking-wide text-ink-2 uppercase">Por hora de entrada</h3>
-                    <span className="text-[11px] text-muted max-sm:hidden">{editable ? 'Ajustá de a media hora' : ''}</span>
-                  </div>
-                  <ul className="m-0 list-none p-0">
-                    {actual.turnos.map((a, i) => {
-                      const emp = empPorId.get(a.empleado_id)
-                      const repetido = actual.turnos.findIndex((x) => x.empleado_id === a.empleado_id) < i
-                      return (
-                        <FilaCierre
-                          key={a.id}
-                          a={a}
-                          emp={emp}
-                          segundo={repetido}
-                          editable={editable && !a.id.startsWith('tmp-')}
-                          onHoras={(h) => cambiarHoras(a, h)}
-                          onAusente={(v) => cambiarAusente(a, emp, v)}
-                        />
-                      )
-                    })}
-                  </ul>
-                </section>
-              )}
+                actual.divs.map((d) => {
+                  // Las divisiones ajenas arrancan plegadas para el encargado
+                  const plegable = !d.mia
+                  const abierta = !plegable || abiertas.has(d.clave)
+                  const editable = d.mia && d.estado === 'pendiente'
+                  const detalle = quien(d.cierre)
+                  return (
+                    <section key={d.clave} aria-label={d.nombre} className="overflow-hidden rounded-2xl border border-line bg-card shadow-card">
+                      <header
+                        className={`flex items-center gap-3 border-line bg-head px-4 py-3 lg:px-5 ${abierta ? 'border-b' : ''} ${plegable ? 'cursor-pointer transition-colors hover:bg-hover' : ''}`}
+                        onClick={
+                          plegable
+                            ? () =>
+                                setAbiertas((s) => {
+                                  const n = new Set(s)
+                                  if (n.has(d.clave)) n.delete(d.clave)
+                                  else n.add(d.clave)
+                                  return n
+                                })
+                            : undefined
+                        }
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${d.division.momento === 'noche' ? 'bg-[#3A4431] text-[#E8EEDF]' : 'bg-warn-soft text-warn'}`}
+                        >
+                          {d.division.momento === 'noche' ? <Moon size={16} /> : <Sun size={16} />}
+                        </span>
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <span className="flex flex-wrap items-center gap-2">
+                            <h3 className="m-0 text-[15px] font-semibold">{d.nombre}</h3>
+                            <Pill {...ESTADO_PILL[d.estado].tono}>
+                              {d.estado === 'confirmado' && <Check size={11} strokeWidth={2.6} aria-hidden="true" />}
+                              {ESTADO_PILL[d.estado].label}
+                            </Pill>
+                          </span>
+                          <span className="truncate text-[12px] text-muted">
+                            {d.presentes}/{d.personas} {d.personas === 1 ? 'persona' : 'personas'} · <span className="font-mono">{fmtHoras(d.reales)}</span>
+                            {detalle && ` · ${detalle}`}
+                            {!d.mia && !esAdmin && d.estado === 'pendiente' && ' · la confirma su encargado'}
+                          </span>
+                        </div>
+                        {plegable && (
+                          <button
+                            type="button"
+                            aria-expanded={abierta}
+                            aria-label={abierta ? `Ocultar ${d.nombre}` : `Ver ${d.nombre}`}
+                            className="flex size-9 items-center justify-center rounded-lg text-muted transition-colors hover:bg-press hover:text-ink"
+                          >
+                            <ChevronDown size={18} className={`transition-transform duration-200 ${abierta ? 'rotate-180' : ''}`} />
+                          </button>
+                        )}
+                      </header>
 
-              {/* Celular: acción fija abajo */}
-              {(actual.estado === 'pendiente' || actual.estado === 'confirmado') && (
-                <div className="sticky bottom-0 z-10 -mx-4 border-t border-line bg-ground/95 px-4 pt-3 pb-3 backdrop-blur-md lg:hidden">
-                  <AccionDia estado={actual.estado} horas={actual.reales} onConfirmar={confirmar} onReabrir={reabrir} ancho />
-                </div>
+                      {abierta && (
+                        <>
+                          <ul className="m-0 list-none p-0">
+                            {d.turnos.map((a, i) => {
+                              const emp = empPorId.get(a.empleado_id)
+                              return (
+                                <FilaCierre
+                                  key={a.id}
+                                  a={a}
+                                  emp={emp}
+                                  segundo={d.turnos.findIndex((x) => x.empleado_id === a.empleado_id) < i}
+                                  editable={editable && !a.id.startsWith('tmp-')}
+                                  onHoras={(h) => cambiarHoras(a, h)}
+                                  onAusente={(v) => cambiarAusente(a, emp, v)}
+                                />
+                              )
+                            })}
+                          </ul>
+                          {d.mia && (d.estado === 'pendiente' || d.estado === 'confirmado') && (
+                            <div className="flex flex-col gap-2 border-t border-line bg-foot px-4 py-3 sm:flex-row sm:items-center sm:justify-between lg:px-5">
+                              <span className="text-[12px] text-muted max-sm:hidden">
+                                {d.estado === 'pendiente' ? 'Revisá las horas y confirmá cuando esté todo bien.' : 'Para corregir algo, reabrila.'}
+                              </span>
+                              {d.estado === 'confirmado' ? (
+                                <Button onClick={() => reabrir(d)} icon={<LockOpen size={16} />} className="max-sm:w-full">
+                                  Reabrir {d.nombre}
+                                </Button>
+                              ) : (
+                                <Button variant="primary" onClick={() => confirmar(d)} icon={<CircleCheckBig size={17} />} className="max-sm:h-12 max-sm:w-full">
+                                  Confirmar {d.nombre}
+                                  <span className="font-mono text-[13px] font-medium opacity-80">· {fmtHoras(d.reales)}</span>
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </section>
+                  )
+                })
               )}
             </div>
           </div>
         )}
       </PageBody>
     </>
-  )
-}
-
-/* ---------- Piezas ---------- */
-
-function AccionDia({
-  estado,
-  horas,
-  onConfirmar,
-  onReabrir,
-  ancho = false,
-}: {
-  estado: Estado
-  horas: number
-  onConfirmar: () => void
-  onReabrir: () => void
-  ancho?: boolean
-}) {
-  if (estado === 'confirmado')
-    return (
-      <Button onClick={onReabrir} icon={<LockOpen size={16} />} className={ancho ? 'w-full' : ''}>
-        Reabrir día
-      </Button>
-    )
-  return (
-    <Button
-      variant="primary"
-      size={ancho ? 'lg' : 'md'}
-      onClick={onConfirmar}
-      disabled={estado !== 'pendiente'}
-      icon={<CircleCheckBig size={17} />}
-      className={ancho ? 'w-full' : ''}
-    >
-      Confirmar día
-      <span className="font-mono text-[13px] font-medium opacity-80">· {fmtHoras(horas)}</span>
-    </Button>
-  )
-}
-
-function Dato({ titulo, valor, unidad, destacado = false }: { titulo: string; valor: string; unidad?: string; destacado?: boolean }) {
-  return (
-    <div className="flex flex-col gap-1 rounded-xl bg-foot px-3 py-2.5">
-      <dt className="text-[11px] font-medium text-muted">{titulo}</dt>
-      <dd className={`m-0 font-mono text-[20px] leading-none font-semibold tracking-tight ${destacado ? 'text-olive' : 'text-ink'}`}>
-        {valor}
-        {unidad && <span className="ml-0.5 text-[12px] font-medium text-muted">{unidad}</span>}
-      </dd>
-    </div>
-  )
-}
-
-function EstadoMini({ estado, invertido }: { estado: Estado; invertido: boolean }) {
-  if (estado === 'confirmado')
-    return (
-      <span className={`flex size-3.5 items-center justify-center rounded-full ${invertido ? 'bg-white text-olive' : 'bg-olive text-white'}`}>
-        <Check size={9} strokeWidth={3.2} aria-hidden="true" />
-      </span>
-    )
-  if (estado === 'pendiente') return <span aria-hidden="true" className={`size-2 rounded-full ${invertido ? 'bg-[#F1D9AE]' : 'bg-[#D9A54A]'}`} />
-  return <span aria-hidden="true" className={`h-0.5 w-2.5 rounded-full ${invertido ? 'bg-white/40' : 'bg-line-strong'}`} />
-}
-
-function EstadoIcono({ estado }: { estado: Estado }) {
-  if (estado === 'confirmado')
-    return (
-      <span title="Confirmado" className="flex size-6 items-center justify-center rounded-full bg-olive text-white">
-        <Check size={13} strokeWidth={3} aria-label="Confirmado" />
-      </span>
-    )
-  if (estado === 'pendiente')
-    return (
-      <Pill {...pillWarn} className="!px-1.5 !text-[10px]">
-        Pendiente
-      </Pill>
-    )
-  return null
-}
-
-function FilaCierre({
-  a,
-  emp,
-  segundo,
-  editable,
-  onHoras,
-  onAusente,
-}: {
-  a: Asignacion
-  emp: Empleado | undefined
-  segundo: boolean
-  editable: boolean
-  onHoras: (h: number) => void
-  onAusente: (v: boolean) => void
-}) {
-  const nombre = emp?.nombre ?? 'Persona'
-  const h = horasReales(a)
-  const plan = Number(a.horas_plan)
-  const corregido = !a.ausente && a.horas_reales !== null && Number(a.horas_reales) !== plan
-  const c = turnoColor(a.color)
-
-  return (
-    <li className={`flex items-center gap-3 border-b border-divider px-4 py-3 last:border-b-0 lg:gap-4 lg:px-5 ${a.ausente ? 'bg-[#FCF8F7]' : ''}`}>
-      <span className="max-sm:hidden">
-        <Avatar nombre={nombre} size={36} muted={a.ausente} />
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className={`flex items-center gap-1.5 truncate text-sm font-semibold ${a.ausente ? 'text-muted' : ''}`}>
-          <span className="truncate">{nombre}</span>
-          {segundo && <span className="shrink-0 text-[11px] font-medium text-faint">2.º turno</span>}
-        </span>
-        <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted">
-          <span aria-hidden="true" className="size-2 shrink-0 rounded-full border" style={{ background: c.bg, borderColor: c.bd }} />
-          <span className="truncate">
-            <span className="max-sm:hidden">{a.nombre_turno} </span>
-            <span className="font-mono">{rango(a)}</span>
-          </span>
-          {corregido &&
-            (editable ? (
-              <button
-                type="button"
-                onClick={() => onHoras(plan)}
-                title={`Volver a ${fmtHoras(plan)} planificadas`}
-                className="-my-1 inline-flex shrink-0 items-center gap-1 rounded-md px-1 py-1 font-mono text-[11px] text-olive transition-colors hover:bg-olive-soft active:bg-olive-line"
-              >
-                <RotateCcw size={11} aria-hidden="true" />
-                <span className="max-sm:hidden">plan</span> {sinUnidad(plan)}
-              </button>
-            ) : (
-              <span className="shrink-0 font-mono text-[11px] text-faint">plan {sinUnidad(plan)}</span>
-            ))}
-        </span>
-      </div>
-
-      {a.ausente ? (
-        <Pill {...pillDanger} className="h-9 w-[124px] justify-center !rounded-xl !text-[12px] font-semibold">
-          <UserX size={13} aria-hidden="true" />
-          Ausente
-        </Pill>
-      ) : editable ? (
-        <div role="group" aria-label={`Horas de ${nombre}`} className="flex h-9 shrink-0 items-center rounded-xl border border-line bg-card shadow-xs">
-          <button
-            type="button"
-            aria-label="Media hora menos"
-            disabled={h <= 0}
-            onClick={() => onHoras(h - 0.5)}
-            className="flex size-9 items-center justify-center rounded-l-xl text-ink-2 transition-colors hover:bg-hover active:bg-press disabled:opacity-35"
-          >
-            <Minus size={15} />
-          </button>
-          <output
-            aria-live="polite"
-            className={`w-[52px] border-x border-line text-center font-mono text-[13px] leading-[34px] font-semibold tabular-nums ${corregido ? 'bg-olive-soft text-olive' : ''}`}
-          >
-            {sinUnidad(h)}
-            <span className="text-[10px] font-medium opacity-70">{' '}h</span>
-          </output>
-          <button
-            type="button"
-            aria-label="Media hora más"
-            disabled={h >= 24}
-            onClick={() => onHoras(h + 0.5)}
-            className="flex size-9 items-center justify-center rounded-r-xl text-ink-2 transition-colors hover:bg-hover active:bg-press disabled:opacity-35"
-          >
-            <Plus size={15} />
-          </button>
-        </div>
-      ) : (
-        <span className={`w-[124px] text-right font-mono text-[14px] font-semibold tabular-nums ${corregido ? 'text-olive' : ''}`}>{fmtHoras(h)}</span>
-      )}
-
-      {editable && (
-        <IconButton
-          size="sm"
-          label={a.ausente ? `Marcar a ${nombre} como presente` : `Marcar a ${nombre} como ausente`}
-          onClick={() => onAusente(!a.ausente)}
-          className={a.ausente ? 'bg-danger-soft text-danger hover:bg-[#F3D3CC] hover:text-danger' : 'hover:bg-danger-soft hover:text-danger'}
-        >
-          {a.ausente ? <UserCheck size={17} /> : <UserX size={17} />}
-        </IconButton>
-      )}
-    </li>
   )
 }

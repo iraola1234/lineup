@@ -1,7 +1,6 @@
 import { Avatar, Pill, Sheet, pillDanger } from '../../components/ui'
 import { turnoColor } from '../../lib/colors'
 import { fechaCorta } from '../../lib/fechas'
-import { fmtPesos } from '../../lib/propinas'
 import { horasReales } from '../../lib/semana'
 import { fmtHoras } from '../../lib/time'
 import { rango } from '../semana/helpers'
@@ -28,17 +27,16 @@ export function DetallePersona({ persona, resumen, onClose }: { persona: FilaPer
           <dl className="m-0 grid grid-cols-3 gap-2">
             <Dato titulo="Horas reales" valor={sinUnidad(persona.reales)} detalle={`plan ${sinUnidad(persona.plan)}`} />
             <Dato titulo="Días" valor={String(persona.dias)} detalle={persona.ausencias ? `${persona.ausencias} ausencia${persona.ausencias > 1 ? 's' : ''}` : 'sin ausencias'} alerta={persona.ausencias > 0} />
-            <Dato titulo="Propina" valor={fmtPesos(persona.propina)} detalle={persona.emp.participa_propina ? 'del mes' : 'no participa'} />
+            <Dato titulo="Diferencia" valor={persona.reales === persona.plan ? '0' : `${persona.reales > persona.plan ? '+' : '−'}${sinUnidad(Math.abs(persona.reales - persona.plan))}`} detalle="real vs. plan" alerta={persona.reales < persona.plan} />
           </dl>
 
           <div className="overflow-hidden rounded-2xl border border-line">
             <ul className="m-0 list-none p-0">
               {turnos.map((a, i) => {
                 const primero = i === 0 || turnos[i - 1].fecha_jornada !== a.fecha_jornada
-                const parte = primero && !a.ausente ? resumen?.partes.get(`${a.empleado_id}|${a.fecha_jornada}`) : undefined
                 const h = horasReales(a)
                 const corregido = !a.ausente && a.horas_reales !== null && Number(a.horas_reales) !== Number(a.horas_plan)
-                const pendiente = estadoDe.get(a.fecha_jornada) === 'pendiente'
+                const pendiente = !!resumen && !resumen.confirmado(a) && estadoDe.get(a.fecha_jornada) !== 'futuro'
                 const c = turnoColor(a.color)
                 return (
                   <li key={a.id} className={`flex items-center gap-3 px-3.5 py-2.5 ${primero && i > 0 ? 'border-t border-divider' : ''} ${a.ausente ? 'bg-[#FCF8F7]' : ''}`}>
@@ -55,7 +53,6 @@ export function DetallePersona({ persona, resumen, onClose }: { persona: FilaPer
                     ) : (
                       <span className="flex shrink-0 flex-col items-end">
                         <span className={`font-mono text-[13px] font-semibold tabular-nums ${corregido ? 'text-olive' : ''}`}>{fmtHoras(h)}</span>
-                        {parte !== undefined && <span className="font-mono text-[11px] text-money">{fmtPesos(parte)}</span>}
                       </span>
                     )}
                   </li>

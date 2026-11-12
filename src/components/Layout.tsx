@@ -1,6 +1,8 @@
 import { BarChart3, CalendarDays, CircleCheckBig, LogOut, Settings, Wallet, type LucideIcon } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import { useData } from '../lib/data'
+import { nombreDivision } from '../lib/divisiones'
 import { useLocal } from '../lib/local'
 import { Avatar, Menu } from './ui'
 
@@ -16,9 +18,11 @@ const secciones: { to: string; label: string; Icon: LucideIcon; end: boolean }[]
  * Computadora (≥ 1024 px): menú lateral fijo + contenido a todo el ancho.
  */
 export function Layout() {
-  const { local } = useLocal()
+  const { local, esAdmin, misDivisiones } = useLocal()
+  const { areas } = useData()
   const { session, signOut } = useAuth()
   const email = session?.user.email ?? ''
+  const rolTexto = esAdmin ? 'Administrador' : misDivisiones.length ? misDivisiones.map((d) => nombreDivision(areas, d)).join(' · ') : 'Encargado'
 
   return (
     <div className="flex h-full bg-ground">
@@ -44,8 +48,12 @@ export function Layout() {
           {secciones.map((s) => (
             <SideLink key={s.to} {...s} />
           ))}
-          <span className="px-3 pt-5 pb-1.5 text-[11px] font-medium tracking-wide text-faint uppercase">Ajustes</span>
-          <SideLink to="/configuracion" end={false} label="Configuración" Icon={Settings} />
+          {esAdmin && (
+            <>
+              <span className="px-3 pt-5 pb-1.5 text-[11px] font-medium tracking-wide text-faint uppercase">Ajustes</span>
+              <SideLink to="/configuracion" end={false} label="Configuración" Icon={Settings} />
+            </>
+          )}
         </nav>
 
         <div className="border-t border-line p-3">
@@ -62,7 +70,7 @@ export function Layout() {
               >
                 <Avatar nombre={email || 'Encargado'} size={32} />
                 <span className="flex min-w-0 flex-col">
-                  <span className="text-[13px] font-semibold">Encargado</span>
+                  <span className="truncate text-[13px] font-semibold">{rolTexto}</span>
                   <span className="truncate text-[11px] text-muted">{email}</span>
                 </span>
               </button>

@@ -1,15 +1,16 @@
-import { Archive, ArchiveRestore, Clock, Plus, Trash2 } from 'lucide-react'
+import { Archive, ArchiveRestore, Clock, Moon, Plus, Sun, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useToast } from '../../components/toast'
-import { Button, ConfirmDialog, Field, Sheet, TextInput } from '../../components/ui'
+import { Button, ConfirmDialog, Field, Segmented, Sheet, TextInput } from '../../components/ui'
 import { COLOR_KEYS, TURNO_COLORS, turnoColor } from '../../lib/colors'
 import { useData } from '../../lib/data'
 import { useLocalId } from '../../lib/local'
 import { supabase } from '../../lib/supabase'
 import { duracion, fmtHoras, hhmm } from '../../lib/time'
-import type { TipoTurno } from '../../lib/types'
+import { momentoPorHora } from '../../lib/semana'
+import type { Momento, TipoTurno } from '../../lib/types'
 
-type Draft = { id?: string; nombre: string; inicio: string; fin: string; color: string }
+type Draft = { id?: string; nombre: string; inicio: string; fin: string; color: string; momento: Momento; momentoTocado?: boolean }
 
 export function TurnosTab() {
   const localId = useLocalId()
@@ -32,6 +33,7 @@ export function TurnosTab() {
       inicio: draft.inicio,
       fin: draft.fin,
       color: draft.color,
+      momento: draft.momento,
       ...(draft.id ? {} : { orden: tipos.length + 1 }),
     }
     const { error } = draft.id
@@ -75,7 +77,7 @@ export function TurnosTab() {
         <p className="m-0 max-w-xl text-sm text-muted">
           Son las opciones para asignar en la semana. <span className="font-medium text-ink-2">Otro horario</span> siempre está disponible para excepciones.
         </p>
-        <Button variant="primary" onClick={() => setDraft({ nombre: '', inicio: '09:00', fin: '17:00', color: 'azul' })} icon={<Plus size={17} />}>
+        <Button variant="primary" onClick={() => setDraft({ nombre: '', inicio: '09:00', fin: '17:00', color: 'azul', momento: 'dia' })} icon={<Plus size={17} />}>
           Nuevo turno
         </Button>
       </div>
@@ -87,7 +89,7 @@ export function TurnosTab() {
             <li key={t.id}>
               <button
                 type="button"
-                onClick={() => setDraft({ id: t.id, nombre: t.nombre, inicio: hhmm(t.inicio), fin: hhmm(t.fin), color: t.color })}
+                onClick={() => setDraft({ id: t.id, nombre: t.nombre, inicio: hhmm(t.inicio), fin: hhmm(t.fin), color: t.color, momento: t.momento, momentoTocado: true })}
                 className="group flex w-full items-center gap-4 rounded-2xl border border-line bg-card p-4 text-left shadow-card transition-[border-color,box-shadow,transform] duration-150 hover:-translate-y-px hover:border-line-strong hover:shadow-[0_6px_16px_-8px_rgba(28,29,26,0.2)] active:translate-y-0"
               >
                 <span
@@ -103,7 +105,13 @@ export function TurnosTab() {
                     {hhmm(t.inicio)} – {hhmm(t.fin)}
                   </span>
                 </span>
-                <span className="rounded-full bg-foot px-2 py-0.5 font-mono text-xs text-ink-2">{fmtHoras(duracion(t.inicio, t.fin))}</span>
+                <span className="flex flex-col items-end gap-1">
+                  <span className="rounded-full bg-foot px-2 py-0.5 font-mono text-xs text-ink-2">{fmtHoras(duracion(t.inicio, t.fin))}</span>
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted">
+                    {t.momento === 'noche' ? <Moon size={11} aria-hidden="true" /> : <Sun size={11} aria-hidden="true" />}
+                    {t.momento === 'noche' ? 'Noche' : 'Día'}
+                  </span>
+                </span>
               </button>
             </li>
           )
@@ -162,7 +170,9 @@ export function TurnosTab() {
             <div className="grid grid-cols-2 gap-3">
               <Field label="Entrada">
                 {(id) => (
-                  <TextInput id={id} type="time" step={900} value={draft.inicio} onChange={(e) => setDraft({ ...draft, inicio: e.target.value })} className="font-mono" />
+                  <TextInput id={id} type="time" step={900} value={draft.inicio} onChange={(e) =>
+                      setDraft({ ...draft, inicio: e.target.value, momento: draft.momentoTocado || !e.target.value ? draft.momento : momentoPorHora(e.target.value) })
+                    } className="font-mono" />
                 )}
               </Field>
               <Field label="Salida">
@@ -177,6 +187,19 @@ export function TurnosTab() {
                 {draft.fin < draft.inicio && ' · termina al día siguiente y cuenta como el día en que empieza'}
               </p>
             )}
+            <Field label="Momento" hint="Define qué encargado confirma las horas: Salón o Cocina según la persona, día o noche según el turno.">
+              {() => (
+                <Segmented
+                  label="Momento del turno"
+                  value={draft.momento}
+                  onChange={(m) => setDraft({ ...draft, momento: m, momentoTocado: true })}
+                  options={[
+                    { value: 'dia', label: 'Día', icon: <Sun size={15} /> },
+                    { value: 'noche', label: 'Noche', icon: <Moon size={15} /> },
+                  ]}
+                />
+              )}
+            </Field>
             <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
               <legend className="mb-2 p-0 text-[13px] font-medium text-ink-2">Color</legend>
               <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">

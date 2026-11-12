@@ -8,12 +8,11 @@ import { useData } from '../../lib/data'
 import { jornadaActual } from '../../lib/fechas'
 import { useLocal, useLocalId } from '../../lib/local'
 import { moverMes, nombreMes, useMes } from '../../lib/mes'
-import { fmtPesos } from '../../lib/propinas'
 import { fmtHoras } from '../../lib/time'
 import { calcularMes, type FilaPersona } from './calculo'
 import { DetallePersona } from './DetallePersona'
 
-type Orden = 'area' | 'nombre' | 'dias' | 'reales' | 'propina'
+type Orden = 'area' | 'nombre' | 'dias' | 'reales'
 
 const sinUnidad = (h: number) => fmtHoras(h).replace(' h', '')
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`
@@ -43,7 +42,6 @@ export function MesPage() {
     if (orden === 'nombre') p.sort((a, b) => a.emp.nombre.localeCompare(b.emp.nombre))
     if (orden === 'dias') p.sort((a, b) => b.dias - a.dias)
     if (orden === 'reales') p.sort((a, b) => b.reales - a.reales)
-    if (orden === 'propina') p.sort((a, b) => b.propina - a.propina)
     return p
   }, [resumen, orden])
 
@@ -82,7 +80,7 @@ export function MesPage() {
     <>
       <PageHeader
         title="Resumen del mes"
-        subtitle="Horas y propinas por persona"
+        subtitle="Historial de horas por persona"
         actions={
           <>
             <Button onClick={exportar} loading={exportando} disabled={!resumen || vacio} icon={<FileSpreadsheet size={16} />} className="max-lg:hidden">
@@ -133,7 +131,7 @@ export function MesPage() {
           <EmptyState
             icon={<BarChart3 size={22} />}
             title={`No hay turnos en ${nombreMes(mes)}`}
-            description="Cuando armes horarios para este mes, acá vas a ver las horas y propinas de cada persona."
+            description="Cuando armes horarios para este mes, acá vas a ver las horas de cada persona."
             action={
               <Link to="/" className="inline-flex h-11 items-center rounded-xl border border-line bg-card px-4 text-sm font-semibold shadow-xs transition-colors hover:border-line-strong hover:bg-hover active:bg-press">
                 Ir a Horarios
@@ -144,11 +142,7 @@ export function MesPage() {
           <>
             <dl className="m-0 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
               <Kpi titulo="Horas reales" valor={sinUnidad(t.reales)} unidad="h" detalle={`de ${sinUnidad(t.plan)} h planificadas`} />
-              <Kpi
-                titulo="Propinas"
-                valor={fmtPesos(t.propinaRepartida)}
-                detalle={t.propinaCargada > 0 ? plural(resumen.dias.filter((d) => d.reparto).length, 'día cargado', 'días cargados') : 'Todavía sin cargar'}
-              />
+              <Kpi titulo="Ausencias" valor={String(t.ausencias)} detalle={t.ausencias ? 'días con falta' : 'Sin faltas'} aviso={t.ausencias > 0} />
               <Kpi titulo="Personas" valor={String(resumen.personas.length)} detalle="con turnos en el mes" />
               <Kpi
                 titulo="Días cerrados"
@@ -161,7 +155,7 @@ export function MesPage() {
             {t.diasPendientes > 0 && (
               <Notice tone="info">
                 <span>
-                {t.diasPendientes === 1 ? 'Hay 1 día sin cerrar' : `Hay ${t.diasPendientes} días sin cerrar`}: ahí se cuentan las horas planificadas hasta que lo confirmes en{' '}
+                {t.diasPendientes === 1 ? 'Hay 1 día sin cerrar' : `Hay ${t.diasPendientes} días sin cerrar`}: en las divisiones sin confirmar se cuentan las horas planificadas. Se confirman en{' '}
                 <Link to="/cierre" className="font-semibold underline decoration-1 underline-offset-2 hover:no-underline">
                   Cierre
                 </Link>.
@@ -182,7 +176,6 @@ export function MesPage() {
                   <option value="area">Área</option>
                   <option value="nombre">Nombre</option>
                   <option value="reales">Más horas</option>
-                  <option value="propina">Más propina</option>
                 </select>
               </div>
               {grupos.map((g) => (
@@ -214,7 +207,7 @@ export function MesPage() {
                               {sinUnidad(f.reales)}
                               <span className="ml-0.5 text-[11px] font-medium text-muted">h</span>
                             </span>
-                            <span className="font-mono text-[12px] text-money">{f.propina > 0 ? fmtPesos(f.propina) : '—'}</span>
+                            <span className="font-mono text-[11px] text-muted">plan {sinUnidad(f.plan)}</span>
                           </span>
                           <ChevronRight size={16} className="text-faint" aria-hidden="true" />
                         </button>
@@ -241,10 +234,7 @@ export function MesPage() {
                     <Th orden={orden} campo="reales" onOrden={setOrden} num>
                       Reales
                     </Th>
-                    <th className="px-3 py-2.5 text-right font-medium">Diferencia</th>
-                    <Th orden={orden} campo="propina" onOrden={setOrden} num className="pr-5">
-                      Propina
-                    </Th>
+                    <th className="py-2.5 pr-5 pl-3 text-right font-medium">Diferencia</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -257,9 +247,6 @@ export function MesPage() {
                           </th>
                           <td className="px-3 py-2 text-right font-mono text-[12px] font-semibold text-ink-2">{sinUnidad(g.filas.reduce((s, f) => s + f.reales, 0))}</td>
                           <td />
-                          <td className="py-2 pr-5 pl-3 text-right font-mono text-[12px] font-semibold text-ink-2">
-                            {fmtPesos(g.filas.reduce((s, f) => s + f.propina, 0))}
-                          </td>
                         </tr>
                       )}
                       {g.filas.map((f) => {
@@ -286,10 +273,9 @@ export function MesPage() {
                             <td className={`px-3 text-right font-mono tabular-nums ${f.ausencias ? 'font-semibold text-danger' : 'text-faint'}`}>{f.ausencias || '—'}</td>
                             <td className="px-3 text-right font-mono text-muted tabular-nums">{sinUnidad(f.plan)}</td>
                             <td className="px-3 text-right font-mono font-semibold tabular-nums">{sinUnidad(f.reales)}</td>
-                            <td className={`px-3 text-right font-mono tabular-nums ${dif > 0 ? 'text-olive' : dif < 0 ? 'text-danger' : 'text-faint'}`}>
+                            <td className={`pr-5 pl-3 text-right font-mono tabular-nums ${dif > 0 ? 'text-olive' : dif < 0 ? 'text-danger' : 'text-faint'}`}>
                               {dif === 0 ? '—' : `${dif > 0 ? '+' : '−'}${sinUnidad(Math.abs(dif))}`}
                             </td>
-                            <td className="pr-5 pl-3 text-right font-mono font-semibold text-money tabular-nums">{f.propina > 0 ? fmtPesos(f.propina) : <span className="font-normal text-faint">—</span>}</td>
                           </tr>
                         )
                       })}
@@ -303,8 +289,9 @@ export function MesPage() {
                     <td className="px-3 text-right font-mono tabular-nums">{resumen.personas.reduce((s, f) => s + f.ausencias, 0) || '—'}</td>
                     <td className="px-3 text-right font-mono tabular-nums">{sinUnidad(t.plan)}</td>
                     <td className="px-3 text-right font-mono tabular-nums">{sinUnidad(t.reales)}</td>
-                    <td />
-                    <td className="pr-5 pl-3 text-right font-mono text-money tabular-nums">{fmtPesos(t.propinaRepartida)}</td>
+                    <td className="pr-5 pl-3 text-right font-mono tabular-nums">
+                      {t.reales === t.plan ? '—' : `${t.reales > t.plan ? '+' : '−'}${sinUnidad(Math.abs(t.reales - t.plan))}`}
+                    </td>
                   </tr>
                 </tfoot>
               </table>

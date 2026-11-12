@@ -9,7 +9,7 @@ import { LoginPage } from './pages/LoginPage'
 import { OnboardingPage } from './pages/OnboardingPage'
 import { CierrePage } from './pages/cierre/CierrePage'
 import { MesPage } from './pages/mes/MesPage'
-import { PropinasPage } from './pages/placeholders'
+import { PropinasPage } from './pages/propinas/PropinasPage'
 import { SemanaPage } from './pages/semana/SemanaPage'
 
 function Splash() {
@@ -21,7 +21,7 @@ function Splash() {
 }
 
 function AppRoutes() {
-  const { local, loading, error } = useLocal()
+  const { local, loading, error, esAdmin } = useLocal()
 
   if (loading) return <Splash />
   if (error) {
@@ -44,7 +44,7 @@ function AppRoutes() {
           <Route path="cierre" element={<CierrePage />} />
           <Route path="propinas" element={<PropinasPage />} />
           <Route path="mes" element={<MesPage />} />
-          <Route path="configuracion" element={<ConfiguracionPage />} />
+          <Route path="configuracion" element={esAdmin ? <ConfiguracionPage /> : <Navigate to="/" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

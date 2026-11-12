@@ -1,11 +1,13 @@
-import { CalendarDays, Clock3, Eye, EyeOff, Wallet } from 'lucide-react'
+import { CalendarDays, Clock3, Eye, EyeOff, MailCheck, Wallet } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Button, Field, Notice, TextInput } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import { supabaseConfigured } from '../lib/supabase'
 
 export function LoginPage() {
-  const { signIn } = useAuth()
+  const { signIn, signUp } = useAuth()
+  const [modo, setModo] = useState<'entrar' | 'crear'>('entrar')
+  const [enviado, setEnviado] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [ver, setVer] = useState(false)
@@ -15,8 +17,18 @@ export function LoginPage() {
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setBusy(true)
-    setError(await signIn(email.trim(), password))
+    if (modo === 'entrar') setError(await signIn(email.trim(), password))
+    else {
+      const r = await signUp(email.trim().toLowerCase(), password)
+      if (r === 'confirmar') setEnviado(true)
+      else setError(r)
+    }
     setBusy(false)
+  }
+
+  const cambiarModo = () => {
+    setModo((m) => (m === 'entrar' ? 'crear' : 'entrar'))
+    setError(null)
   }
 
   return (
@@ -51,14 +63,36 @@ export function LoginPage() {
             <img src="/favicon.svg" alt="" className="size-12 rounded-2xl" />
           </div>
           <div className="flex flex-col gap-1.5">
-            <h2 className="m-0 text-[26px] font-semibold tracking-[-0.02em]">Entrar a Lineup</h2>
-            <p className="m-0 text-sm text-muted">Con el email y la contraseña del encargado.</p>
+            <h2 className="m-0 text-[26px] font-semibold tracking-[-0.02em]">{modo === 'entrar' ? 'Entrar a Lineup' : 'Crear tu cuenta'}</h2>
+            <p className="m-0 text-sm text-muted">
+              {modo === 'entrar' ? 'Con tu email y contraseña.' : 'Usá el mismo email con el que te invitó el administrador.'}
+            </p>
           </div>
 
           {!supabaseConfigured ? (
             <Notice tone="error">
               Falta conectar la base de datos. Cargá VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY (ver README).
             </Notice>
+          ) : enviado ? (
+            <div className="flex flex-col items-start gap-4 rounded-2xl border border-line bg-card p-5 shadow-card">
+              <span className="flex size-11 items-center justify-center rounded-xl bg-olive-soft text-olive">
+                <MailCheck size={22} />
+              </span>
+              <div className="flex flex-col gap-1">
+                <p className="m-0 text-[15px] font-semibold">Revisá tu email</p>
+                <p className="m-0 text-sm text-muted">
+                  Te mandamos un link a <span className="font-medium text-ink">{email.trim().toLowerCase()}</span> para confirmar la cuenta. Después entrá acá con tu contraseña.
+                </p>
+              </div>
+              <Button
+                onClick={() => {
+                  setEnviado(false)
+                  setModo('entrar')
+                }}
+              >
+                Ya confirmé, entrar
+              </Button>
+            </div>
           ) : (
             <form onSubmit={onSubmit} className="flex flex-col gap-4">
               <Field label="Email">
@@ -70,7 +104,8 @@ export function LoginPage() {
                     <TextInput
                       id={id}
                       type={ver ? 'text' : 'password'}
-                      autoComplete="current-password"
+                      autoComplete={modo === 'entrar' ? 'current-password' : 'new-password'}
+                      minLength={modo === 'crear' ? 6 : undefined}
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -89,8 +124,14 @@ export function LoginPage() {
               </Field>
               {error && <Notice tone="error">{error}</Notice>}
               <Button type="submit" variant="primary" size="lg" loading={busy} className="mt-1 w-full">
-                Entrar
+                {modo === 'entrar' ? 'Entrar' : 'Crear cuenta'}
               </Button>
+              <p className="m-0 text-center text-sm text-muted">
+                {modo === 'entrar' ? '¿Te invitaron como encargado?' : '¿Ya tenés cuenta?'}{' '}
+                <button type="button" onClick={cambiarModo} className="rounded font-semibold text-olive underline-offset-2 hover:underline">
+                  {modo === 'entrar' ? 'Crear cuenta' : 'Entrar'}
+                </button>
+              </p>
             </form>
           )}
         </div>

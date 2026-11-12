@@ -18,6 +18,8 @@ type Props = {
   onMover: (asignacionId: string, destino: Empleado, fecha: string, copiar: boolean) => void
   onEliminar: (asignacionId: string) => void
   accionesDia: (fecha: string) => MenuItem[]
+  /** Encargados: ven la grilla sin poder editar ni arrastrar. */
+  soloLectura?: boolean
 }
 
 /** Estado interno del arrastre (se muta en cada movimiento sin volver a dibujar la grilla). */
@@ -46,7 +48,7 @@ const UMBRAL = 5 // px que hay que mover antes de que empiece el arrastre (si no
  * Clic en un casillero para asignar. Arrastrar un turno lo mueve; con ⌘ (Ctrl en Windows) lo copia;
  * soltarlo en la papelera lo elimina.
  */
-export function GrillaSemana({ grupos, dias, hoy, turnosDe, horasSemana, onAbrir, onMover, onEliminar, accionesDia }: Props) {
+export function GrillaSemana({ grupos, dias, hoy, turnosDe, horasSemana, onAbrir, onMover, onEliminar, accionesDia, soloLectura = false }: Props) {
   const todos = useMemo(() => grupos.flatMap((g) => g.empleados), [grupos])
   const porId = useMemo(() => new Map(todos.map((e) => [e.id, e])), [todos])
 
@@ -228,7 +230,7 @@ export function GrillaSemana({ grupos, dias, hoy, turnosDe, horasSemana, onAbrir
                           <span title="Horas">{fmtHoras(t.horas)}</span>
                         </span>
                       </div>
-                      <Menu
+                      {!soloLectura && <Menu
                         items={accionesDia(dia)}
                         trigger={({ toggle, ref, open }) => (
                           <button
@@ -244,7 +246,7 @@ export function GrillaSemana({ grupos, dias, hoy, turnosDe, horasSemana, onAbrir
                             <MoreHorizontal size={16} />
                           </button>
                         )}
-                      />
+                      />}
                     </div>
                   </th>
                 )
@@ -300,13 +302,16 @@ export function GrillaSemana({ grupos, dias, hoy, turnosDe, horasSemana, onAbrir
                               <button
                                 key={a.id}
                                 type="button"
-                                onPointerDown={(ev) => empezar(ev, a)}
+                                disabled={soloLectura}
+                                onPointerDown={soloLectura ? undefined : (ev) => empezar(ev, a)}
                                 onClick={() => {
                                   if (!suprimirClick.current) onAbrir(e, dia)
                                 }}
-                                aria-label={`${e.nombre}, ${fechaCorta(dia)}: ${a.nombre_turno} ${rango(a)}. Editar`}
-                                className={`flex flex-1 touch-none flex-col items-start justify-center rounded-[10px] border px-2 py-1.5 text-left transition-[transform,box-shadow,opacity] duration-150 select-none ${
-                                  drag ? '' : 'cursor-grab hover:-translate-y-px hover:shadow-[0_3px_10px_-4px_rgba(28,29,26,0.35)] active:translate-y-0'
+                                aria-label={`${e.nombre}, ${fechaCorta(dia)}: ${a.nombre_turno} ${rango(a)}${soloLectura ? '' : '. Editar'}`}
+                                className={`flex flex-1 flex-col items-start justify-center rounded-[10px] border px-2 py-1.5 text-left transition-[transform,box-shadow,opacity] duration-150 select-none disabled:cursor-default ${
+                                  soloLectura ? '' : 'touch-none'
+                                } ${
+                                  drag || soloLectura ? '' : 'cursor-grab hover:-translate-y-px hover:shadow-[0_3px_10px_-4px_rgba(28,29,26,0.35)] active:translate-y-0'
                                 } ${origen && modo !== 'copiar' ? 'opacity-35' : ''} ${origen && modo === 'copiar' ? 'ring-2 ring-olive/40' : ''} ${
                                   tmp ? 'opacity-80' : ''
                                 }`}
@@ -321,7 +326,7 @@ export function GrillaSemana({ grupos, dias, hoy, turnosDe, horasSemana, onAbrir
                               </button>
                             )
                           })}
-                          {turnos.length === 0 && (
+                          {turnos.length === 0 && !soloLectura && (
                             <button
                               type="button"
                               onClick={() => onAbrir(e, dia)}

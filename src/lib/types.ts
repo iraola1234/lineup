@@ -36,13 +36,41 @@ export type Asignacion = {
   horas_plan: number
   horas_reales: number | null
   ausente: boolean
+  momento: Momento
 }
 
-export type DiaCierre = {
+/** Momento del turno: junto con el área de la persona define la división (Salón día, Cocina noche…). */
+export type Momento = 'dia' | 'noche'
+
+export type Division = { area_id: string; momento: Momento }
+
+/** Cierre de una división en un día. Quién y cuándo lo pone la base. */
+export type CierreDivision = Division & {
   local_id: string
   fecha: string
   confirmado: boolean
   confirmado_en: string | null
+  confirmado_por: string | null
+}
+
+export type Rol = 'admin' | 'encargado'
+
+export type Miembro = {
+  usuario_id: string
+  local_id: string
+  rol: Rol
+  email: string | null
+  nombre: string
+}
+
+export type Invitacion = {
+  id: string
+  local_id: string
+  email: string
+  nombre: string
+  rol: Rol
+  divisiones: Division[]
+  creado_en: string
 }
 
 /** Qué asignarle a una persona en un día: un tipo de turno, un horario a mano, o nada (libre). */
@@ -57,4 +85,5 @@ export type TipoTurno = {
   color: string // clave de paleta (ver colors.ts)
   orden: number
   archivado: boolean
+  momento: Momento
 }

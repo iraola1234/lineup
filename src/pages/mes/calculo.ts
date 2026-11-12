@@ -1,6 +1,5 @@
 import { addDays } from '../../lib/fechas'
 import { limitesMes, type DatosMes } from '../../lib/mes'
-import { repartirDia, type RepartoDia } from '../../lib/propinas'
 import { horasReales } from '../../lib/semana'
 import type { Area, Asignacion, Empleado } from '../../lib/types'
 
@@ -15,7 +14,6 @@ export type FilaPersona = {
   ausencias: number
   plan: number
   reales: number
-  propina: number
   turnos: Asignacion[]
 }
 
@@ -25,22 +23,23 @@ export type FilaDia = {
   personas: number
   plan: number
   reales: number
-  reparto: RepartoDia | null
+  /** Divisiones con turnos ese día y cuántas están confirmadas. */
+  divisiones: number
+  confirmadas: number
 }
 
 export type ResumenMes = {
   personas: FilaPersona[]
   dias: FilaDia[]
-  /** Propina de una persona en un día: `${empleado_id}|${fecha}` → pesos. */
-  partes: Map<string, number>
+  /** ¿Está confirmada la división de este turno? */
+  confirmado: (a: Asignacion) => boolean
   totales: {
     plan: number
     reales: number
-    propinaCargada: number
-    propinaRepartida: number
+    ausencias: number
     diasConTurnos: number
     diasCerrados: number
-    /** Días ya pasados (o de hoy) con turnos y sin confirmar. */
+    /** Días ya pasados (o de hoy) con alguna división sin confirmar. */
     diasPendientes: number
   }
 }
@@ -48,26 +47,25 @@ export type ResumenMes = {
 export function calcularMes(datos: DatosMes, empleados: Empleado[], areas: Area[], mes: string, hoy: string): ResumenMes {
   const { desde, hasta } = limitesMes(mes)
   const empPorId = new Map(empleados.map((e) => [e.id, e]))
-  const participa = (id: string) => empPorId.get(id)?.participa_propina ?? false
   const porFecha = new Map<string, Asignacion[]>()
   for (const a of datos.asignaciones) porFecha.set(a.fecha_jornada, [...(porFecha.get(a.fecha_jornada) ?? []), a])
-  const confirmados = new Set(datos.cierres.filter((c) => c.confirmado).map((c) => c.fecha))
-  const montos = new Map(datos.propinas.map((p) => [p.fecha, p.monto]))
+  const confirmadas = new Set(datos.cierres.filter((c) => c.confirmado).map((c) => `${c.fecha}|${c.area_id}|${c.momento}`))
+  const claveDe = (a: Asignacion) => `${a.fecha_jornada}|${empPorId.get(a.empleado_id)?.area_id}|${a.momento}`
+  const confirmado = (a: Asignacion) => confirmadas.has(claveDe(a))
 
   const dias: FilaDia[] = []
-  const partes = new Map<string, number>()
   for (let f = desde; f <= hasta; f = addDays(f, 1)) {
     const turnos = porFecha.get(f) ?? []
-    const monto = montos.get(f) ?? 0
-    const reparto = monto > 0 ? repartirDia(f, monto, turnos, participa) : null
-    reparto?.partes.forEach((p, id) => partes.set(`${id}|${f}`, p))
+    const divs = new Set(turnos.map(claveDe))
+    const ok = [...divs].filter((k) => confirmadas.has(k)).length
     dias.push({
       fecha: f,
-      estado: turnos.length === 0 ? 'sin' : confirmados.has(f) ? 'confirmado' : f > hoy ? 'futuro' : 'pendiente',
+      estado: turnos.length === 0 ? 'sin' : ok === divs.size ? 'confirmado' : f > hoy ? 'futuro' : 'pendiente',
       personas: new Set(turnos.filter((a) => !a.ausente).map((a) => a.empleado_id)).size,
       plan: turnos.reduce((s, a) => s + Number(a.horas_plan), 0),
       reales: turnos.reduce((s, a) => s + horasReales(a), 0),
-      reparto,
+      divisiones: divs.size,
+      confirmadas: ok,
     })
   }
 
@@ -79,8 +77,6 @@ export function calcularMes(datos: DatosMes, empleados: Empleado[], areas: Area[
       const turnos = datos.asignaciones.filter((a) => a.empleado_id === emp.id)
       const vino = new Set(turnos.filter((a) => !a.ausente).map((a) => a.fecha_jornada))
       const falto = new Set(turnos.filter((a) => a.ausente && !vino.has(a.fecha_jornada)).map((a) => a.fecha_jornada))
-      let propina = 0
-      for (const f of vino) propina += partes.get(`${emp.id}|${f}`) ?? 0
       return {
         emp,
         area: areas.find((a) => a.id === emp.area_id),
@@ -88,7 +84,6 @@ export function calcularMes(datos: DatosMes, empleados: Empleado[], areas: Area[
         ausencias: falto.size,
         plan: turnos.reduce((s, a) => s + Number(a.horas_plan), 0),
         reales: turnos.reduce((s, a) => s + horasReales(a), 0),
-        propina,
         turnos,
       }
     })
@@ -103,12 +98,11 @@ export function calcularMes(datos: DatosMes, empleados: Empleado[], areas: Area[
   return {
     personas,
     dias,
-    partes,
+    confirmado,
     totales: {
       plan: dias.reduce((s, d) => s + d.plan, 0),
       reales: dias.reduce((s, d) => s + d.reales, 0),
-      propinaCargada: datos.propinas.reduce((s, p) => s + p.monto, 0),
-      propinaRepartida: [...partes.values()].reduce((s, p) => s + p, 0),
+      ausencias: personas.reduce((s, p) => s + p.ausencias, 0),
       diasConTurnos: conTurnos.length,
       diasCerrados: conTurnos.filter((d) => d.estado === 'confirmado').length,
       diasPendientes: conTurnos.filter((d) => d.estado === 'pendiente').length,

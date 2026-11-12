@@ -81,6 +81,8 @@ export type VistaProps = {
   horasSemana: Map<string, number>
   fecha: string
   onAbrir: (emp: Empleado, fecha: string) => void
+  /** Encargados: ven pero no editan. */
+  soloLectura?: boolean
 }
 
 export const horasTotales = (turnos: Asignacion[]) => turnos.reduce((s, a) => s + (a.ausente ? 0 : Number(a.horas_plan)), 0)

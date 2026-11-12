@@ -6,6 +6,8 @@ type AuthState = {
   session: Session | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<string | null>
+  /** Crea la cuenta. Devuelve error, o 'confirmar' si hay que validar el email. */
+  signUp: (email: string, password: string) => Promise<string | null | 'confirmar'>
   signOut: () => Promise<void>
 }
 
@@ -34,12 +36,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       : 'No se pudo iniciar sesión. Probá de nuevo.'
   }
 
+  const signUp = async (email: string, password: string) => {
+    if (!supabase) return 'La app todavía no está conectada a la base de datos.'
+    const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } })
+    if (error) {
+      if (/password/i.test(error.message)) return 'La contraseña tiene que tener al menos 6 caracteres.'
+      if (/registered|exists/i.test(error.message)) return 'Ese email ya tiene cuenta. Entrá con tu contraseña.'
+      return 'No se pudo crear la cuenta. Probá de nuevo.'
+    }
+    return data.session ? null : 'confirmar'
+  }
+
   const signOut = async () => {
     await supabase?.auth.signOut()
   }
 
   return (
-    <AuthContext.Provider value={{ session, loading, signIn, signOut }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ session, loading, signIn, signUp, signOut }}>{children}</AuthContext.Provider>
   )
 }
 
