@@ -1,9 +1,10 @@
-import { BarChart3, CalendarDays, CircleCheckBig, LogOut, Settings, Wallet, type LucideIcon } from 'lucide-react'
+import { BarChart3, CalendarDays, CircleCheckBig, KeyRound, LogOut, Settings, Wallet, type LucideIcon } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { useData } from '../lib/data'
 import { nombreDivision } from '../lib/divisiones'
 import { useLocal } from '../lib/local'
+import { CuentaProvider, useAbrirCuenta } from './MiCuenta'
 import { Avatar, Menu } from './ui'
 
 const secciones: { to: string; label: string; Icon: LucideIcon; end: boolean }[] = [
@@ -18,6 +19,15 @@ const secciones: { to: string; label: string; Icon: LucideIcon; end: boolean }[]
  * Computadora (≥ 1024 px): menú lateral fijo + contenido a todo el ancho.
  */
 export function Layout() {
+  return (
+    <CuentaProvider>
+      <LayoutInterno />
+    </CuentaProvider>
+  )
+}
+
+function LayoutInterno() {
+  const abrirCuenta = useAbrirCuenta()
   const { local, esAdmin, misDivisiones } = useLocal()
   const { areas } = useData()
   const { session, signOut } = useAuth()
@@ -52,7 +62,10 @@ export function Layout() {
         <div className="border-t border-line p-3">
           <Menu
             align="start"
-            items={[{ label: 'Cerrar sesión', icon: <LogOut size={16} />, onSelect: signOut }]}
+            items={[
+              { label: 'Mi cuenta y contraseña', icon: <KeyRound size={16} />, onSelect: abrirCuenta },
+              { label: 'Cerrar sesión', icon: <LogOut size={16} />, onSelect: signOut },
+            ]}
             trigger={({ toggle, ref, open }) => (
               <button
                 ref={ref}

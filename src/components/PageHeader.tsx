@@ -1,6 +1,7 @@
-import { LogOut, Settings } from 'lucide-react'
+import { KeyRound, LogOut, Settings } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import { useAbrirCuenta } from './MiCuenta'
 import { useAuth } from '../lib/auth'
 import { useLocal } from '../lib/local'
 import { Avatar, Menu } from './ui'
@@ -17,6 +18,13 @@ type Props = {
 export function PageHeader({ title, subtitle, actions, children, showSettings = true }: Props) {
   const { esAdmin } = useLocal()
   const { session, signOut } = useAuth()
+  const abrirCuenta = useAbrirCuenta()
+  const navigate = useNavigate()
+  const itemsCuenta = [
+    ...(esAdmin ? [{ label: 'Configuración', icon: <Settings size={16} />, onSelect: () => navigate('/configuracion') }] : []),
+    { label: 'Mi cuenta y contraseña', icon: <KeyRound size={16} />, onSelect: abrirCuenta },
+    { label: 'Cerrar sesión', icon: <LogOut size={16} />, onSelect: signOut },
+  ]
   return (
     <header className="border-b border-line bg-card lg:border-none lg:bg-transparent">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-3.5 px-4 pt-[max(16px,env(safe-area-inset-top))] pb-3.5 lg:gap-4 lg:px-8 lg:pt-7 lg:pb-2">
@@ -27,10 +35,10 @@ export function PageHeader({ title, subtitle, actions, children, showSettings = 
           </div>
           <div className="flex shrink-0 items-center gap-1.5 lg:gap-2">
             {actions}
-            {showSettings && !esAdmin && (
+            {showSettings && (
               <span className="lg:hidden">
                 <Menu
-                  items={[{ label: 'Cerrar sesión', icon: <LogOut size={16} />, onSelect: signOut }]}
+                  items={itemsCuenta}
                   trigger={({ toggle, ref, open }) => (
                     <button
                       ref={ref}
@@ -45,16 +53,6 @@ export function PageHeader({ title, subtitle, actions, children, showSettings = 
                   )}
                 />
               </span>
-            )}
-            {showSettings && esAdmin && (
-              <Link
-                to="/configuracion"
-                aria-label="Configuración"
-                title="Configuración"
-                className="flex size-11 items-center justify-center rounded-xl text-muted transition-colors hover:bg-hover hover:text-ink active:bg-press lg:hidden"
-              >
-                <Settings size={20} />
-              </Link>
             )}
           </div>
         </div>

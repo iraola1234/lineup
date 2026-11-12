@@ -491,7 +491,7 @@ export function Menu({
   const [open, setOpen] = useState(false)
   const btnRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
-  const [pos, setPos] = useState<{ top: number; left?: number; right?: number }>({ top: 0 })
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; left?: number; right?: number }>({ top: 0 })
   useEscape(open, () => {
     setOpen(false)
     btnRef.current?.focus()
@@ -500,8 +500,11 @@ export function Menu({
   useLayoutEffect(() => {
     if (!open || !btnRef.current) return
     const r = btnRef.current.getBoundingClientRect()
-    setPos(align === 'end' ? { top: r.bottom + 6, right: window.innerWidth - r.right } : { top: r.bottom + 6, left: r.left })
-  }, [open, align])
+    // Si no entra abajo (ej. el menú de la cuenta al pie de la barra lateral), se abre hacia arriba
+    const alto = 16 + items.length * 52
+    const vertical = r.bottom + 6 + alto > window.innerHeight && r.top - 6 - alto > 0 ? { bottom: window.innerHeight - r.top + 6 } : { top: r.bottom + 6 }
+    setPos(align === 'end' ? { ...vertical, right: window.innerWidth - r.right } : { ...vertical, left: r.left })
+  }, [open, align, items.length])
 
   useEffect(() => {
     if (!open) return
@@ -534,7 +537,7 @@ export function Menu({
             ref={menuRef}
             role="menu"
             onKeyDown={onKeyDown}
-            style={{ position: 'fixed', top: pos.top, left: pos.left, right: pos.right }}
+            style={{ position: 'fixed', top: pos.top, bottom: pos.bottom, left: pos.left, right: pos.right }}
             className="z-[70] flex min-w-[240px] origin-top-right animate-pop-in flex-col rounded-2xl border border-line bg-card p-1.5 shadow-pop"
           >
             {items.map((it) => (

@@ -1,4 +1,4 @@
-import { BadgeCheck, Check, Copy, Crown, Mail, Plus, ShieldCheck, Trash2, UserCog } from 'lucide-react'
+import { BadgeCheck, Check, Copy, Crown, Eye, EyeOff, KeyRound, Mail, Plus, ShieldCheck, Trash2, UserCog, Wand2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useToast } from '../../components/toast'
 import {
@@ -26,7 +26,7 @@ import type { Division, Invitacion, Miembro, Rol } from '../../lib/types'
 
 type Persona = Miembro & { divisiones: Division[] }
 type Draft = {
-  modo: 'invitar' | 'editar'
+  modo: 'crear' | 'editar'
   usuario_id?: string
   email: string
   nombre: string
@@ -34,6 +34,36 @@ type Draft = {
   divisiones: Division[]
   empleado_id: string | null
   yo?: boolean
+  /** Contraseña inicial (crear) o nueva (restablecer). */
+  password: string
+  restablecer?: boolean
+}
+
+/** Datos para pasarle a la persona (se muestran una sola vez). */
+type Acceso = { nombre: string; email: string; password: string; nuevo: boolean }
+
+/** Contraseña fácil de dictar: sin letras que se confunden (l, 1, O, 0). */
+function generarContrasena() {
+  const letras = 'abcdefghjkmnpqrstuvwxyz'
+  const numeros = '23456789'
+  const al = (s: string) => s[crypto.getRandomValues(new Uint32Array(1))[0] % s.length]
+  const parte = () => Array.from({ length: 4 }, () => al(letras)).join('')
+  return `${parte()}-${parte()}-${al(numeros)}${al(numeros)}`
+}
+
+/** Llama a la función de servidor que administra cuentas. Devuelve el mensaje de error, si hubo. */
+async function invocarUsuarios(body: Record<string, unknown>): Promise<string | null> {
+  if (!supabase) return 'Sin conexión a la base de datos.'
+  const { error } = await supabase.functions.invoke('usuarios', { body })
+  if (!error) return null
+  try {
+    const ctx = (error as { context?: Response }).context
+    const j = ctx ? await ctx.json() : null
+    if (j?.error) return String(j.error)
+  } catch {
+    // respuesta sin cuerpo
+  }
+  return 'No se pudo completar. Revisá la conexión y probá de nuevo.'
 }
 
 const emailValido = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim())
@@ -48,6 +78,8 @@ export function UsuariosTab() {
   const [invitaciones, setInvitaciones] = useState<Invitacion[]>([])
   const [draft, setDraft] = useState<Draft | null>(null)
   const [busy, setBusy] = useState(false)
+  const [acceso, setAcceso] = useState<Acceso | null>(null)
+  const [verClave, setVerClave] = useState(false)
   const [quitar, setQuitar] = useState<{
     tipo: 'miembro' | 'invitacion'
     id: string
@@ -85,12 +117,14 @@ export function UsuariosTab() {
     ...invitaciones.filter((i) => i.email !== draft?.email.trim().toLowerCase()).map((i) => i.empleado_id),
   ])
   const fichas = empleados.filter((e) => (e.activo || e.id === draft?.empleado_id) && (!ocupadas.has(e.id) || e.id === draft?.empleado_id))
-  const valido = !!draft && (draft.modo === 'editar' || emailValido(draft.email)) && (draft.rol === 'admin' || draft.divisiones.length > 0)
-  const yaExiste =
+  const claveOk = (c: string) => c.length >= 8
+  const valido =
     !!draft &&
-    draft.modo === 'invitar' &&
-    (personas?.some((p) => p.email?.toLowerCase() === draft.email.trim().toLowerCase()) ||
-      invitaciones.some((i) => i.email === draft.email.trim().toLowerCase()))
+    (draft.modo === 'editar' || (emailValido(draft.email) && claveOk(draft.password))) &&
+    (!draft.restablecer || claveOk(draft.password)) &&
+    (draft.yo || draft.rol === 'admin' || draft.divisiones.length > 0)
+  const yaExiste =
+    !!draft && draft.modo === 'crear' && !!personas?.some((p) => p.email?.toLowerCase() === draft.email.trim().toLowerCase())
 
   const guardar = async () => {
     if (!supabase || !draft || !valido) return
@@ -98,20 +132,33 @@ export function UsuariosTab() {
     const divs = draft.rol === 'admin' ? [] : draft.divisiones
     const empleado_id = draft.empleado_id || null
     let error: unknown = null
-    if (draft.modo === 'invitar') {
-      const r = await supabase.from('invitaciones').upsert(
-        {
-          local_id: localId,
-          email: draft.email.trim().toLowerCase(),
-          nombre: draft.nombre.trim(),
-          rol: draft.rol,
-          divisiones: divs,
-          empleado_id,
-        },
-        { onConflict: 'local_id,email' },
-      )
-      error = r.error
-    } else if (draft.usuario_id) {
+    if (draft.modo === 'crear') {
+      const email = draft.email.trim().toLowerCase()
+      const msg = await invocarUsuarios({
+        accion: 'crear',
+        local_id: localId,
+        email,
+        password: draft.password,
+        nombre: draft.nombre.trim(),
+        rol: draft.rol,
+        divisiones: divs,
+        empleado_id,
+      })
+      setBusy(false)
+      if (msg) return toast.show(msg, { tone: 'error' })
+      setDraft(null)
+      setVerClave(false)
+      setAcceso({ nombre: draft.nombre.trim(), email, password: draft.password, nuevo: true })
+      return cargar()
+    }
+    if (draft.usuario_id && draft.restablecer) {
+      const msg = await invocarUsuarios({ accion: 'contrasena', local_id: localId, usuario_id: draft.usuario_id, password: draft.password })
+      if (msg) {
+        setBusy(false)
+        return toast.show(msg, { tone: 'error' })
+      }
+    }
+    if (draft.usuario_id) {
       // A uno mismo no se le cambia el rol (no podés sacarte de administrador)
       const cambios = draft.yo ? { nombre: draft.nombre.trim(), empleado_id } : { nombre: draft.nombre.trim(), rol: draft.rol, empleado_id }
       const r1 = await supabase.from('miembros').update(cambios).eq('local_id', localId).eq('usuario_id', draft.usuario_id)
@@ -143,8 +190,9 @@ export function UsuariosTab() {
       return toast.show((error as { code?: string }).code === '23505' ? 'Esa ficha ya está vinculada a otro usuario.' : 'No se pudo guardar. Probá de nuevo.', {
         tone: 'error',
       })
-    toast.show(draft.modo === 'invitar' ? `Invitación lista para ${draft.email.trim().toLowerCase()}` : 'Cambios guardados')
     setDraft(null)
+    if (draft.restablecer) setAcceso({ nombre: draft.nombre, email: draft.email, password: draft.password, nuevo: false })
+    else toast.show('Cambios guardados')
     cargar()
   }
 
@@ -164,6 +212,18 @@ export function UsuariosTab() {
     toast.show(quitar.tipo === 'miembro' ? `${quitar.nombre} ya no tiene acceso` : 'Invitación cancelada')
     setDraft(null)
     cargar()
+  }
+
+  const mensajeAcceso = (a: Acceso) =>
+    `Hola${a.nombre ? ` ${a.nombre.split(' ')[0]}` : ''}! ${a.nuevo ? `Te creé un usuario en el backoffice de ${local?.nombre ?? 'Mansalva'}` : 'Te cambié la contraseña del backoffice'}.\n\nEntrá a: ${window.location.origin}\nEmail: ${a.email}\nContraseña: ${a.password}\n\nDespués podés cambiarla desde tu cuenta.`
+
+  const copiarAcceso = async (a: Acceso) => {
+    try {
+      await navigator.clipboard.writeText(mensajeAcceso(a))
+      toast.show('Datos copiados: pegalos en WhatsApp')
+    } catch {
+      toast.show('No se pudo copiar', { tone: 'error' })
+    }
   }
 
   const mensaje = (inv: Invitacion) =>
@@ -197,17 +257,18 @@ export function UsuariosTab() {
           variant="primary"
           onClick={() =>
             setDraft({
-              modo: 'invitar',
+              modo: 'crear',
               email: '',
               nombre: '',
               rol: 'encargado',
               divisiones: [],
               empleado_id: null,
+              password: generarContrasena(),
             })
           }
           icon={<Plus size={17} />}
         >
-          Invitar usuario
+          Nuevo usuario
         </Button>
       </div>
 
@@ -237,6 +298,7 @@ export function UsuariosTab() {
                         divisiones: p.divisiones,
                         empleado_id: p.empleado_id,
                         yo,
+                        password: '',
                       })
                     }
                     className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-hover active:bg-press"
@@ -332,8 +394,8 @@ export function UsuariosTab() {
 
       <Sheet
         open={!!draft}
-        title={draft?.modo === 'editar' ? draft.nombre || draft.email : 'Invitar usuario'}
-        subtitle={draft?.modo === 'editar' ? draft.email : 'Le llega acceso apenas cree su cuenta'}
+        title={draft?.modo === 'editar' ? draft.nombre || draft.email : 'Nuevo usuario'}
+        subtitle={draft?.modo === 'editar' ? draft.email : 'La cuenta queda lista para entrar, sin confirmar email'}
         onClose={() => setDraft(null)}
         footer={
           <>
@@ -356,7 +418,7 @@ export function UsuariosTab() {
             <span className="flex-1" />
             <Button onClick={() => setDraft(null)}>Cancelar</Button>
             <Button variant="primary" onClick={guardar} disabled={!valido} loading={busy}>
-              {draft?.modo === 'editar' ? 'Guardar cambios' : 'Crear invitación'}
+              {draft?.modo === 'editar' ? 'Guardar cambios' : 'Crear usuario'}
             </Button>
           </>
         }
@@ -366,12 +428,8 @@ export function UsuariosTab() {
             <Field label="Nombre">
               {(id) => <TextInput id={id} value={draft.nombre} placeholder="Ej.: Pablo" onChange={(e) => setDraft({ ...draft, nombre: e.target.value })} />}
             </Field>
-            {draft.modo === 'invitar' && (
-              <Field
-                label="Email"
-                hint="Con este email va a crear su cuenta."
-                error={yaExiste ? 'Ese email ya tiene acceso o una invitación: al guardar se actualiza.' : null}
-              >
+            {draft.modo === 'crear' && (
+              <Field label="Email" hint="Con este email va a entrar." error={yaExiste ? 'Ese email ya tiene un usuario en este local.' : null}>
                 {(id) => (
                   <TextInput
                     id={id}
@@ -385,6 +443,61 @@ export function UsuariosTab() {
                 )}
               </Field>
             )}
+            {(draft.modo === 'crear' || draft.restablecer) && (
+              <Field
+                label={draft.modo === 'crear' ? 'Contraseña inicial' : 'Nueva contraseña'}
+                hint="Mínimo 8 caracteres. Se la pasás vos; después la puede cambiar desde su cuenta."
+                error={draft.password && !claveOk(draft.password) ? 'Tiene que tener al menos 8 caracteres.' : null}
+              >
+                {(id) => (
+                  <div className="flex gap-2">
+                    <div className="relative min-w-0 flex-1">
+                      <TextInput
+                        id={id}
+                        type={verClave ? 'text' : 'password'}
+                        autoComplete="new-password"
+                        value={draft.password}
+                        onChange={(e) => setDraft({ ...draft, password: e.target.value })}
+                        className="pr-12 font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setVerClave((v) => !v)}
+                        aria-label={verClave ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                        className="absolute top-1/2 right-1.5 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg text-muted transition-colors hover:bg-hover hover:text-ink"
+                      >
+                        {verClave ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                    <Button
+                      onClick={() => {
+                        setDraft({ ...draft, password: generarContrasena() })
+                        setVerClave(true)
+                      }}
+                      icon={<Wand2 size={16} />}
+                    >
+                      Generar
+                    </Button>
+                  </div>
+                )}
+              </Field>
+            )}
+            {draft.modo === 'editar' && !draft.yo && !draft.restablecer && (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-head px-3.5 py-3">
+                <span className="text-[13px] text-ink-2">¿Se olvidó la contraseña?</span>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setDraft({ ...draft, restablecer: true, password: generarContrasena() })
+                    setVerClave(true)
+                  }}
+                  icon={<KeyRound size={15} />}
+                >
+                  Restablecer contraseña
+                </Button>
+              </div>
+            )}
+            {draft.yo && <p className="m-0 -mt-1 text-xs text-muted">Tu contraseña la cambiás desde el menú de tu cuenta.</p>}
             <Field label="También es empleado" hint="Si trabaja en el local, elegí su ficha: así figura en horarios, horas y propinas como cualquier empleado.">
               {(id) => (
                 <Select id={id} value={draft.empleado_id ?? ''} onChange={(e) => setDraft({ ...draft, empleado_id: e.target.value || null })}>
@@ -456,6 +569,40 @@ export function UsuariosTab() {
               </>
             )}
           </>
+        )}
+      </Sheet>
+
+      <Sheet
+        open={!!acceso}
+        title={acceso?.nuevo ? 'Usuario creado' : 'Contraseña cambiada'}
+        subtitle="Pasale estos datos para entrar"
+        onClose={() => setAcceso(null)}
+        footer={
+          <>
+            <span className="flex-1" />
+            <Button onClick={() => setAcceso(null)}>Listo</Button>
+            <Button variant="primary" onClick={() => acceso && copiarAcceso(acceso)} icon={<Copy size={16} />}>
+              Copiar datos
+            </Button>
+          </>
+        }
+      >
+        {acceso && (
+          <div className="flex flex-col gap-3">
+            <dl className="m-0 flex flex-col overflow-hidden rounded-2xl border border-line">
+              {[
+                ['Dirección', window.location.origin],
+                ['Email', acceso.email],
+                ['Contraseña', acceso.password],
+              ].map(([k, v], i) => (
+                <div key={k} className={`flex items-center justify-between gap-3 px-4 py-3 ${i > 0 ? 'border-t border-divider' : ''}`}>
+                  <dt className="text-[13px] text-muted">{k}</dt>
+                  <dd className="m-0 truncate font-mono text-[14px] font-semibold">{v}</dd>
+                </div>
+              ))}
+            </dl>
+            <Notice tone="info">Por seguridad, la contraseña no se vuelve a mostrar. Copiala ahora; si se pierde, la podés restablecer.</Notice>
+          </div>
         )}
       </Sheet>
 
