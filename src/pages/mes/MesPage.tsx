@@ -62,7 +62,7 @@ export function MesPage() {
     setExportando(true)
     try {
       const { exportarExcel } = await import('./excel')
-      await exportarExcel(resumen, mes, local?.nombre ?? 'Lineup')
+      await exportarExcel(resumen, mes, local?.nombre ?? 'Mansalva')
       toast.show(`Excel de ${nombreMes(mes)} descargado`)
     } catch {
       toast.show('No se pudo generar el Excel. Probá de nuevo.', { tone: 'error' })

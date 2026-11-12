@@ -59,7 +59,7 @@ function filaTotal(ws: ExcelJS.Worksheet, fila: number, sumar: number[], hasta: 
 
 export async function exportarExcel(r: ResumenMes, mes: string, local: string) {
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'Lineup'
+  wb.creator = 'Mansalva'
   wb.created = new Date()
   const titulo = `${local} · ${nombreMes(mes)}`
 

@@ -5,6 +5,7 @@ import { PageBody, PageHeader } from '../../components/PageHeader'
 import { useToast } from '../../components/toast'
 import { Avatar, Button, ConfirmDialog, EmptyState, IconButton, Notice, Skeleton } from '../../components/ui'
 import { useData } from '../../lib/data'
+import { areaDeCierre } from '../../lib/divisiones'
 import { addDays, jornadaActual, lunesDe, rangoSemana } from '../../lib/fechas'
 import { useLocal, useLocalId } from '../../lib/local'
 import { fmtPesos, repartirSemana, usePropinaSemana, type PagoPropina } from '../../lib/propinas'
@@ -63,12 +64,12 @@ export function PropinasPage() {
     const claves = new Set<string>()
     for (const a of semana.asignaciones) {
       if (a.fecha_jornada > hoy) continue
-      const area = empPorId.get(a.empleado_id)?.area_id
+      const area = areaDeCierre(areas, empPorId.get(a.empleado_id)?.area_id)
       const ok = semana.cierres.some((c) => c.fecha === a.fecha_jornada && c.area_id === area && c.momento === a.momento && c.confirmado)
       if (!ok) claves.add(`${a.fecha_jornada}|${area}|${a.momento}`)
     }
     return claves.size
-  }, [semana.asignaciones, semana.cierres, empPorId, hoy])
+  }, [semana.asignaciones, semana.cierres, empPorId, hoy, areas])
   const semanaEnCurso = addDays(lunes, 6) >= hoy
 
   const empezarEdicion = () => {

@@ -11,9 +11,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Lineup',
-        short_name: 'Lineup',
-        description: 'Horarios semanales, horas y propinas del equipo',
+        name: 'Mansalva · Backoffice',
+        short_name: 'Mansalva',
+        description: 'Backoffice del equipo de Mansalva',
         lang: 'es',
         start_url: '/',
         display: 'standalone',

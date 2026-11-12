@@ -6,7 +6,7 @@ import { useToast } from '../../components/toast'
 import { Button, EmptyState, IconButton, Notice, Pill, Skeleton } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
 import { useData } from '../../lib/data'
-import { claveDivision, nombreDivision, todasLasDivisiones } from '../../lib/divisiones'
+import { areaDeCierre, claveDivision, nombreDivision, todasLasDivisiones } from '../../lib/divisiones'
 import { DIAS, DIAS_LETRA, addDays, diasDeSemana, fechaCorta, fechaLarga, indiceDia, jornadaActual, lunesDe, numeroDia, rangoSemana } from '../../lib/fechas'
 import { useLocal, useLocalId } from '../../lib/local'
 import { horasReales, useSemana } from '../../lib/semana'
@@ -79,7 +79,7 @@ export function CierrePage() {
         const divs: Div[] = divisiones
           .map((division) => {
             const turnos = delDia
-              .filter((a) => empPorId.get(a.empleado_id)?.area_id === division.area_id && a.momento === division.momento)
+              .filter((a) => areaDeCierre(areas, empPorId.get(a.empleado_id)?.area_id) === division.area_id && a.momento === division.momento)
               .sort((a, b) => ordenEntrada(a) - ordenEntrada(b) || (empPorId.get(a.empleado_id)?.nombre ?? '').localeCompare(empPorId.get(b.empleado_id)?.nombre ?? ''))
             const cierre = semana.cierres.find((c) => c.fecha === fecha && c.area_id === division.area_id && c.momento === division.momento)
             const estado: Estado = cierre?.confirmado ? 'confirmado' : fecha > hoy ? 'futuro' : 'pendiente'

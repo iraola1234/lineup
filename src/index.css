@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* =============================================================
-   Lineup · tokens de diseño (estilo Mansalva, nivel producto)
+   Mansalva · Backoffice · tokens de diseño
    ============================================================= */
 @theme {
   --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;

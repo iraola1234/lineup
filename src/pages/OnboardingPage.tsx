@@ -4,7 +4,7 @@ import { Button, Field, Notice, TextInput } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import { useLocal } from '../lib/local'
 
-/** Primera vez que entra alguien sin local: lo crea (dueño) o espera la invitación (encargado). */
+/** Primera vez que entra alguien sin local: lo crea (dueño) o espera la invitación (usuario invitado). */
 export function OnboardingPage() {
   const { crearLocal, recargar } = useLocal()
   const { signOut, session } = useAuth()
@@ -31,7 +31,7 @@ export function OnboardingPage() {
       </div>
       <div className="flex flex-col gap-3 rounded-2xl border border-line bg-card p-4 text-[13px] text-ink-2 shadow-card">
         <p className="m-0">
-          <span className="font-semibold text-ink">¿Sos encargado?</span> No crees un local nuevo: pedile al administrador que te invite con{' '}
+          <span className="font-semibold text-ink">¿Te dieron acceso?</span> No crees un local nuevo: pedile al administrador que te invite con{' '}
           <span className="font-medium text-ink">{session?.user.email}</span> y después tocá revisar.
         </p>
         <Button

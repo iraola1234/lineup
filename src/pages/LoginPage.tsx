@@ -1,4 +1,4 @@
-import { CalendarDays, Clock3, Eye, EyeOff, MailCheck, Wallet } from 'lucide-react'
+import { Eye, EyeOff, MailCheck } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Button, Field, Notice, TextInput } from '../components/ui'
 import { useAuth } from '../lib/auth'
@@ -26,46 +26,23 @@ export function LoginPage() {
     setBusy(false)
   }
 
-  const cambiarModo = () => {
-    setModo((m) => (m === 'entrar' ? 'crear' : 'entrar'))
-    setError(null)
-  }
 
   return (
-    <div className="flex min-h-full">
-      {/* Panel de marca (computadora) */}
-      <aside className="relative hidden w-[44%] max-w-[620px] flex-col justify-between overflow-hidden bg-olive p-12 text-white lg:flex">
-        <div className="flex items-center gap-2.5">
-          <img src="/favicon.svg" alt="" className="size-9 rounded-xl ring-1 ring-white/20" />
-          <span className="text-lg font-semibold tracking-tight">Lineup</span>
+    <div className="flex min-h-full flex-col items-center justify-center bg-ground px-5 py-10">
+      <main className="flex w-full max-w-[400px] flex-col gap-6">
+        <div className="flex items-center gap-3">
+          <img src="/favicon.svg" alt="" className="size-11 rounded-xl" />
+          <span className="flex flex-col leading-tight">
+            <span className="text-lg font-semibold tracking-tight">Mansalva</span>
+            <span className="text-[11px] font-medium tracking-wide text-muted uppercase">Backoffice</span>
+          </span>
         </div>
-        <div className="flex flex-col gap-8">
-          <h1 className="m-0 max-w-md text-[40px] leading-[1.1] font-semibold tracking-[-0.03em]">Los horarios del equipo, resueltos en minutos.</h1>
-          <ul className="m-0 flex list-none flex-col gap-4 p-0 text-[15px] text-white/85">
-            <li className="flex items-center gap-3">
-              <CalendarDays size={20} className="text-[#C9D6A8]" aria-hidden="true" /> Armá la semana y mandala al grupo
-            </li>
-            <li className="flex items-center gap-3">
-              <Clock3 size={20} className="text-[#C9D6A8]" aria-hidden="true" /> Registrá las horas reales de cada día
-            </li>
-            <li className="flex items-center gap-3">
-              <Wallet size={20} className="text-[#C9D6A8]" aria-hidden="true" /> Repartí las propinas sin calculadora
-            </li>
-          </ul>
-        </div>
-        <span className="text-xs text-white/50">Hecho para restaurantes</span>
-        <div aria-hidden="true" className="absolute -right-24 -bottom-24 size-80 rounded-full bg-khaki/25" />
-      </aside>
 
-      <main className="flex flex-1 flex-col items-center justify-center px-5 py-10">
-        <div className="flex w-full max-w-[380px] flex-col gap-8">
-          <div className="flex flex-col items-start gap-4 lg:hidden">
-            <img src="/favicon.svg" alt="" className="size-12 rounded-2xl" />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <h2 className="m-0 text-[26px] font-semibold tracking-[-0.02em]">{modo === 'entrar' ? 'Entrar a Lineup' : 'Crear tu cuenta'}</h2>
+        <div className="flex flex-col gap-6 rounded-2xl border border-line bg-card p-6 shadow-card sm:p-7">
+          <div className="flex flex-col gap-1">
+            <h1 className="m-0 text-[22px] font-semibold tracking-[-0.02em]">{modo === 'entrar' ? 'Iniciar sesión' : 'Crear tu cuenta'}</h1>
             <p className="m-0 text-sm text-muted">
-              {modo === 'entrar' ? 'Con tu email y contraseña.' : 'Usá el mismo email con el que te invitó el administrador.'}
+              {modo === 'entrar' ? 'Con tu email y contraseña.' : 'Usá el mismo email con el que te dieron acceso.'}
             </p>
           </div>
 
@@ -126,15 +103,10 @@ export function LoginPage() {
               <Button type="submit" variant="primary" size="lg" loading={busy} className="mt-1 w-full">
                 {modo === 'entrar' ? 'Entrar' : 'Crear cuenta'}
               </Button>
-              <p className="m-0 text-center text-sm text-muted">
-                {modo === 'entrar' ? '¿Te invitaron como encargado?' : '¿Ya tenés cuenta?'}{' '}
-                <button type="button" onClick={cambiarModo} className="rounded font-semibold text-olive underline-offset-2 hover:underline">
-                  {modo === 'entrar' ? 'Crear cuenta' : 'Entrar'}
-                </button>
-              </p>
             </form>
           )}
         </div>
+        <p className="m-0 text-center text-xs text-faint">Acceso solo para el equipo de Mansalva.</p>
       </main>
     </div>
   )

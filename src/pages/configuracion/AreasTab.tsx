@@ -1,13 +1,13 @@
 import { ChevronDown, ChevronUp, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useToast } from '../../components/toast'
-import { Button, ConfirmDialog, Field, IconButton, Sheet, TextInput } from '../../components/ui'
+import { Button, ConfirmDialog, Field, IconButton, Select, Sheet, TextInput } from '../../components/ui'
 import { useData } from '../../lib/data'
 import { useLocalId } from '../../lib/local'
 import { supabase } from '../../lib/supabase'
 
 const FK_VIOLATION = '23503'
-type Draft = { id?: string; nombre: string }
+type Draft = { id?: string; nombre: string; cierra_con: string | null }
 
 export function AreasTab() {
   const localId = useLocalId()
@@ -23,9 +23,10 @@ export function AreasTab() {
     if (!supabase || !draft || !draft.nombre.trim()) return
     setBusy(true)
     const nombre = draft.nombre.trim()
+    const cierra_con = draft.cierra_con || null
     const { error } = draft.id
-      ? await supabase.from('areas').update({ nombre }).eq('id', draft.id)
-      : await supabase.from('areas').insert({ local_id: localId, nombre, orden: areas.length + 1 })
+      ? await supabase.from('areas').update({ nombre, cierra_con }).eq('id', draft.id)
+      : await supabase.from('areas').insert({ local_id: localId, nombre, cierra_con, orden: areas.length + 1 })
     setBusy(false)
     if (error) return toast.show('No se pudo guardar.', { tone: 'error' })
     toast.show(draft.id ? `Se renombró a ${nombre}` : `Se creó el área ${nombre}`)
@@ -63,7 +64,7 @@ export function AreasTab() {
     <div className="flex max-w-2xl flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="m-0 text-sm text-muted">Agrupan al equipo en la semana y en la imagen para WhatsApp, en este orden.</p>
-        <Button variant="primary" onClick={() => setDraft({ nombre: '' })} icon={<Plus size={17} />}>
+        <Button variant="primary" onClick={() => setDraft({ nombre: '', cierra_con: null })} icon={<Plus size={17} />}>
           Nueva área
         </Button>
       </div>
@@ -76,6 +77,7 @@ export function AreasTab() {
               <span className="text-[15px] font-semibold">{a.nombre}</span>
               <span className="text-xs text-muted">
                 <span className="font-mono">{cuantos(a.id)}</span> {cuantos(a.id) === 1 ? 'persona activa' : 'personas activas'}
+                {a.cierra_con && <> · confirma el encargado de {areas.find((x) => x.id === a.cierra_con)?.nombre}</>}
               </span>
             </span>
             <IconButton label={`Subir ${a.nombre}`} disabled={i === 0} onClick={() => mover(i, -1)}>
@@ -84,7 +86,7 @@ export function AreasTab() {
             <IconButton label={`Bajar ${a.nombre}`} disabled={i === areas.length - 1} onClick={() => mover(i, 1)}>
               <ChevronDown size={18} />
             </IconButton>
-            <IconButton label={`Renombrar ${a.nombre}`} onClick={() => setDraft({ id: a.id, nombre: a.nombre })}>
+            <IconButton label={`Renombrar ${a.nombre}`} onClick={() => setDraft({ id: a.id, nombre: a.nombre, cierra_con: a.cierra_con })}>
               <Pencil size={16} />
             </IconButton>
           </li>
@@ -120,6 +122,22 @@ export function AreasTab() {
             <Field label="Nombre" hint="Ej.: Salón, Cocina, Barra">
               {(id) => <TextInput id={id} value={draft.nombre} onChange={(e) => setDraft({ ...draft, nombre: e.target.value })} />}
             </Field>
+            <div className="mt-4">
+              <Field label="¿Quién confirma sus horas?" hint="Si no tiene encargado propio, sus horas se confirman junto con otra área (ej.: Barra con Salón).">
+                {(id) => (
+                  <Select id={id} value={draft.cierra_con ?? ''} onChange={(e) => setDraft({ ...draft, cierra_con: e.target.value || null })}>
+                    <option value="">Su propio encargado</option>
+                    {areas
+                      .filter((x) => x.id !== draft.id && !x.cierra_con && !areas.some((y) => y.cierra_con === draft.id))
+                      .map((x) => (
+                        <option key={x.id} value={x.id}>
+                          El encargado de {x.nombre}
+                        </option>
+                      ))}
+                  </Select>
+                )}
+              </Field>
+            </div>
           </form>
         )}
       </Sheet>

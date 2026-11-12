@@ -1,3 +1,4 @@
+import { areaDeCierre } from '../../lib/divisiones'
 import { addDays } from '../../lib/fechas'
 import { limitesMes, type DatosMes } from '../../lib/mes'
 import { horasReales } from '../../lib/semana'
@@ -50,7 +51,7 @@ export function calcularMes(datos: DatosMes, empleados: Empleado[], areas: Area[
   const porFecha = new Map<string, Asignacion[]>()
   for (const a of datos.asignaciones) porFecha.set(a.fecha_jornada, [...(porFecha.get(a.fecha_jornada) ?? []), a])
   const confirmadas = new Set(datos.cierres.filter((c) => c.confirmado).map((c) => `${c.fecha}|${c.area_id}|${c.momento}`))
-  const claveDe = (a: Asignacion) => `${a.fecha_jornada}|${empPorId.get(a.empleado_id)?.area_id}|${a.momento}`
+  const claveDe = (a: Asignacion) => `${a.fecha_jornada}|${areaDeCierre(areas, empPorId.get(a.empleado_id)?.area_id)}|${a.momento}`
   const confirmado = (a: Asignacion) => confirmadas.has(claveDe(a))
 
   const dias: FilaDia[] = []

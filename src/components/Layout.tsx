@@ -28,18 +28,11 @@ export function Layout() {
     <div className="flex h-full bg-ground">
       {/* Menú lateral (computadora) */}
       <aside className="hidden w-[248px] shrink-0 flex-col border-r border-line bg-[#F3F2EE] lg:flex">
-        <div className="flex h-16 items-center gap-2.5 px-5">
-          <img src="/favicon.svg" alt="" className="size-7 rounded-lg" />
-          <span className="text-[15px] font-semibold tracking-tight">Lineup</span>
-        </div>
-
-        <div className="mx-3 mb-2 flex items-center gap-3 rounded-xl border border-line bg-card px-3 py-2.5 shadow-xs">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-olive text-[13px] font-semibold text-white">
-            {(local?.nombre ?? 'L').trim().charAt(0).toUpperCase()}
-          </span>
-          <span className="flex min-w-0 flex-col">
-            <span className="truncate text-sm font-semibold">{local?.nombre}</span>
-            <span className="text-[11px] text-muted">Local</span>
+        <div className="flex h-[72px] items-center gap-3 px-5">
+          <img src="/favicon.svg" alt="" className="size-9 rounded-xl" />
+          <span className="flex min-w-0 flex-col leading-tight">
+            <span className="truncate text-[15px] font-semibold tracking-tight">{local?.nombre || 'Mansalva'}</span>
+            <span className="text-[11px] font-medium tracking-wide text-muted uppercase">Backoffice</span>
           </span>
         </div>
 
@@ -68,7 +61,7 @@ export function Layout() {
                 aria-expanded={open}
                 className={`flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-card ${open ? 'bg-card' : ''}`}
               >
-                <Avatar nombre={email || 'Encargado'} size={32} />
+                <Avatar nombre={email || 'Usuario'} size={32} />
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate text-[13px] font-semibold">{rolTexto}</span>
                   <span className="truncate text-[11px] text-muted">{email}</span>

@@ -8,6 +8,8 @@ export type Area = {
   local_id: string
   nombre: string
   orden: number
+  /** Si sus horas las confirma el encargado de otra área (ej. Barra → Salón). */
+  cierra_con: string | null
 }
 
 export type Empleado = {

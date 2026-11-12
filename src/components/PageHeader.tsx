@@ -40,7 +40,7 @@ export function PageHeader({ title, subtitle, actions, children, showSettings = 
                       aria-label="Mi cuenta"
                       className="flex size-11 items-center justify-center rounded-xl transition-colors hover:bg-hover active:bg-press"
                     >
-                      <Avatar nombre={session?.user.email || 'Encargado'} size={30} />
+                      <Avatar nombre={session?.user.email || 'Usuario'} size={30} />
                     </button>
                   )}
                 />
