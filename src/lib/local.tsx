@@ -31,6 +31,13 @@ export function LocalProvider({ children }: { children: ReactNode }) {
   const cargar = useCallback(async () => {
     if (!supabase || !session) return
     setLoading(true)
+    // Si la cuenta de esta sesión fue borrada, se cierra la sesión (vuelve al login)
+    const { error: errUsuario } = await supabase.auth.getUser()
+    if (errUsuario && /not.*exist|user_not_found|invalid.*jwt|sub claim/i.test(`${errUsuario.message} ${errUsuario.code ?? ''}`)) {
+      await supabase.auth.signOut()
+      setLoading(false)
+      return
+    }
     // Si alguien invitó a este email, entra a ese local
     await supabase.rpc('aceptar_invitaciones')
     const uid = session.user.id
