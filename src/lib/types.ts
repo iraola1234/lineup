@@ -61,6 +61,8 @@ export type Miembro = {
   rol: Rol
   email: string | null
   nombre: string
+  /** Ficha de empleado de esta persona, si también trabaja en el local. */
+  empleado_id: string | null
 }
 
 export type Invitacion = {
@@ -70,6 +72,7 @@ export type Invitacion = {
   nombre: string
   rol: Rol
   divisiones: Division[]
+  empleado_id: string | null
   creado_en: string
 }
 

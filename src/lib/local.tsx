@@ -12,6 +12,8 @@ type LocalState = {
   /** Divisiones que este usuario confirma (el admin, todas). */
   misDivisiones: Division[]
   puedoCerrar: (area_id: string, momento: Momento) => boolean
+  /** Ficha de empleado vinculada a este usuario (si trabaja en el local). */
+  miEmpleadoId: string | null
   recargar: () => Promise<void>
   crearLocal: (nombre: string) => Promise<string | null>
   renombrar: (nombre: string) => Promise<string | null>
@@ -27,10 +29,12 @@ export function LocalProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
   const [rol, setRol] = useState<Rol | null>(null)
   const [misDivisiones, setMisDivisiones] = useState<Division[]>([])
+  const [miEmpleadoId, setMiEmpleadoId] = useState<string | null>(null)
 
-  const cargar = useCallback(async () => {
+  /** silencioso: actualiza sin mostrar la pantalla de carga (no se pierde la pantalla actual). */
+  const cargar = useCallback(async (silencioso = false) => {
     if (!supabase || !session) return
-    setLoading(true)
+    if (!silencioso) setLoading(true)
     // Si la cuenta de esta sesión fue borrada, se cierra la sesión (vuelve al login)
     const { error: errUsuario } = await supabase.auth.getUser()
     if (errUsuario && /not.*exist|user_not_found|invalid.*jwt|sub claim/i.test(`${errUsuario.message} ${errUsuario.code ?? ''}`)) {
@@ -43,14 +47,14 @@ export function LocalProvider({ children }: { children: ReactNode }) {
     const uid = session.user.id
     const { data: m, error } = await supabase
       .from('miembros')
-      .select('rol, local_id, locales(id, nombre, creado_en)')
+      .select('rol, local_id, empleado_id, locales(id, nombre, creado_en)')
       .eq('usuario_id', uid)
     if (error) {
       setError('No se pudo cargar el local.')
       setLoading(false)
       return
     }
-    type FilaMiembro = { rol: Rol; local_id: string; locales: (Local & { creado_en: string }) | null }
+    type FilaMiembro = { rol: Rol; local_id: string; empleado_id: string | null; locales: (Local & { creado_en: string }) | null }
     const filas = ((m ?? []) as unknown as FilaMiembro[]).filter((f) => f.locales)
     // Primero el local donde es admin; si no, el más antiguo
     filas.sort((a, b) => (a.rol === b.rol ? a.locales!.creado_en.localeCompare(b.locales!.creado_en) : a.rol === 'admin' ? -1 : 1))
@@ -62,6 +66,7 @@ export function LocalProvider({ children }: { children: ReactNode }) {
     } else {
       setLocal({ id: f.locales!.id, nombre: f.locales!.nombre })
       setRol(f.rol)
+      setMiEmpleadoId(f.empleado_id ?? null)
       const { data: d } = await supabase.from('miembro_divisiones').select('area_id, momento').eq('local_id', f.local_id).eq('usuario_id', uid)
       setMisDivisiones((d ?? []) as Division[])
     }
@@ -72,6 +77,7 @@ export function LocalProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     cargar()
   }, [cargar])
+
 
   const crearLocal = async (nombre: string) => {
     if (!supabase) return 'Sin conexión a la base de datos.'
@@ -96,7 +102,7 @@ export function LocalProvider({ children }: { children: ReactNode }) {
   )
 
   return (
-    <LocalContext.Provider value={{ local, loading, error, rol, esAdmin, misDivisiones, puedoCerrar, recargar: cargar, crearLocal, renombrar }}>
+    <LocalContext.Provider value={{ local, loading, error, rol, esAdmin, misDivisiones, puedoCerrar, miEmpleadoId, recargar: () => cargar(true), crearLocal, renombrar }}>
       {children}
     </LocalContext.Provider>
   )
