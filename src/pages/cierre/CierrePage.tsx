@@ -1,13 +1,14 @@
-import { Check, ChevronDown, ChevronLeft, ChevronRight, CircleCheckBig, Loader2, LockOpen, Moon, Sun, Users } from 'lucide-react'
+import { Check, ChevronDown, CircleCheckBig, Loader2, LockOpen, Moon, Sun, Users } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageBody, PageHeader } from '../../components/PageHeader'
+import { SelectorSemana } from '../../components/Selectores'
 import { useToast } from '../../components/toast'
-import { Button, EmptyState, IconButton, Notice, Pill, Skeleton } from '../../components/ui'
+import { Button, EmptyState, Notice, Pill, Skeleton } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
 import { useData } from '../../lib/data'
 import { areaDeCierre, claveDivision, nombreDivision, todasLasDivisiones } from '../../lib/divisiones'
-import { DIAS, DIAS_LETRA, addDays, diasDeSemana, fechaCorta, fechaLarga, indiceDia, jornadaActual, lunesDe, numeroDia, rangoSemana } from '../../lib/fechas'
+import { DIAS, DIAS_LETRA, diasDeSemana, fechaCorta, fechaLarga, indiceDia, jornadaActual, lunesDe, numeroDia } from '../../lib/fechas'
 import { useLocal, useLocalId } from '../../lib/local'
 import { horasReales, useSemana } from '../../lib/semana'
 import { supabase } from '../../lib/supabase'
@@ -167,15 +168,7 @@ export function CierrePage() {
         }
       >
         <div className="flex items-center gap-1">
-          <div className="flex items-center rounded-xl border border-line bg-card shadow-xs">
-            <IconButton label="Semana anterior" onClick={() => irASemana(addDays(lunes, -7))} className="rounded-r-none">
-              <ChevronLeft size={18} />
-            </IconButton>
-            <span className="min-w-[120px] border-x border-line px-2 text-center text-sm leading-[44px] font-semibold tabular-nums">{rangoSemana(lunes)}</span>
-            <IconButton label="Semana siguiente" onClick={() => irASemana(addDays(lunes, 7))} className="rounded-l-none">
-              <ChevronRight size={18} />
-            </IconButton>
-          </div>
+          <SelectorSemana lunes={lunes} onChange={irASemana} hoy={hoy} />
           {(lunes !== lunesDe(hoy) || dia !== hoy) && (
             <Button variant="ghost" onClick={() => irASemana(lunesDe(hoy))} className="text-olive">
               Hoy

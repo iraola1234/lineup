@@ -1,13 +1,14 @@
-import { ArrowDown, ArrowUp, BarChart3, ChevronLeft, ChevronRight, FileSpreadsheet } from 'lucide-react'
+import { ArrowDown, ArrowUp, BarChart3, ChevronRight, FileSpreadsheet } from 'lucide-react'
 import { Fragment, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { PageBody, PageHeader } from '../../components/PageHeader'
+import { SelectorMes } from '../../components/Selectores'
 import { useToast } from '../../components/toast'
 import { Avatar, Button, EmptyState, IconButton, Notice, Skeleton } from '../../components/ui'
 import { useData } from '../../lib/data'
 import { jornadaActual } from '../../lib/fechas'
 import { useLocal, useLocalId } from '../../lib/local'
-import { moverMes, nombreMes, useMes } from '../../lib/mes'
+import { nombreMes, useMes } from '../../lib/mes'
 import { fmtHoras } from '../../lib/time'
 import { calcularMes, type FilaPersona } from './calculo'
 import { DetallePersona } from './DetallePersona'
@@ -93,15 +94,7 @@ export function MesPage() {
         }
       >
         <div className="flex items-center gap-1">
-          <div className="flex items-center rounded-xl border border-line bg-card shadow-xs">
-            <IconButton label="Mes anterior" onClick={() => setMes(moverMes(mes, -1))} className="rounded-r-none">
-              <ChevronLeft size={18} />
-            </IconButton>
-            <span className="min-w-[150px] border-x border-line px-3 text-center text-sm leading-[44px] font-semibold capitalize">{nombreMes(mes)}</span>
-            <IconButton label="Mes siguiente" onClick={() => setMes(moverMes(mes, 1))} className="rounded-l-none">
-              <ChevronRight size={18} />
-            </IconButton>
-          </div>
+          <SelectorMes mes={mes} onChange={setMes} mesActual={mesActual} />
           {mes !== mesActual && (
             <Button variant="ghost" onClick={() => setMes(mesActual)} className="text-olive">
               Este mes

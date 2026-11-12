@@ -1,12 +1,13 @@
-import { AlertTriangle, Check, CheckCheck, ChevronLeft, ChevronRight, Pencil, Wallet } from 'lucide-react'
+import { AlertTriangle, Check, CheckCheck, Pencil, Wallet } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { PageBody, PageHeader } from '../../components/PageHeader'
+import { SelectorSemana } from '../../components/Selectores'
 import { useToast } from '../../components/toast'
-import { Avatar, Button, ConfirmDialog, EmptyState, IconButton, Notice, Skeleton } from '../../components/ui'
+import { Avatar, Button, ConfirmDialog, EmptyState, Notice, Skeleton } from '../../components/ui'
 import { useData } from '../../lib/data'
 import { areaDeCierre } from '../../lib/divisiones'
-import { addDays, jornadaActual, lunesDe, rangoSemana } from '../../lib/fechas'
+import { addDays, jornadaActual, lunesDe } from '../../lib/fechas'
 import { useLocal, useLocalId } from '../../lib/local'
 import { fmtPesos, repartirSemana, usePropinaSemana, type PagoPropina } from '../../lib/propinas'
 import { useSemana } from '../../lib/semana'
@@ -121,15 +122,7 @@ export function PropinasPage() {
     <>
       <PageHeader title="Propinas" subtitle="Una por semana, repartida según las horas trabajadas">
         <div className="flex items-center gap-1">
-          <div className="flex items-center rounded-xl border border-line bg-card shadow-xs">
-            <IconButton label="Semana anterior" onClick={() => setLunes(addDays(lunes, -7))} className="rounded-r-none">
-              <ChevronLeft size={18} />
-            </IconButton>
-            <span className="min-w-[120px] border-x border-line px-2 text-center text-sm leading-[44px] font-semibold tabular-nums">{rangoSemana(lunes)}</span>
-            <IconButton label="Semana siguiente" onClick={() => setLunes(addDays(lunes, 7))} className="rounded-l-none">
-              <ChevronRight size={18} />
-            </IconButton>
-          </div>
+          <SelectorSemana lunes={lunes} onChange={setLunes} hoy={hoy} />
           {lunes !== addDays(lunesDe(hoy), -7) && (
             <Button variant="ghost" onClick={() => setLunes(addDays(lunesDe(hoy), -7))} className="text-olive">
               Última semana

@@ -7,7 +7,7 @@ import { useLocal } from '../lib/local'
 import { Avatar, Menu } from './ui'
 
 const secciones: { to: string; label: string; Icon: LucideIcon; end: boolean }[] = [
-  { to: '/', label: 'Semana', Icon: CalendarDays, end: true },
+  { to: '/', label: 'Horarios', Icon: CalendarDays, end: true },
   { to: '/cierre', label: 'Cierre', Icon: CircleCheckBig, end: false },
   { to: '/propinas', label: 'Propinas', Icon: Wallet, end: false },
   { to: '/mes', label: 'Mes', Icon: BarChart3, end: false },

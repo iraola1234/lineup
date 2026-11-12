@@ -1,8 +1,6 @@
 import {
   CalendarSync,
   CalendarDays,
-  ChevronLeft,
-  ChevronRight,
   Copy,
   Eraser,
   Loader2,
@@ -15,6 +13,7 @@ import {
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageBody, PageHeader } from '../../components/PageHeader'
+import { SelectorSemana } from '../../components/Selectores'
 import { useToast } from '../../components/toast'
 import { Button, ConfirmDialog, EmptyState, IconButton, Menu, Segmented, Skeleton, type MenuItem } from '../../components/ui'
 import { TURNO_COLORS, turnoColor } from '../../lib/colors'
@@ -268,17 +267,7 @@ export function SemanaPage() {
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-1">
-            <div className="flex items-center rounded-xl border border-line bg-card shadow-xs">
-              <IconButton label="Semana anterior" onClick={() => irASemana(addDays(lunes, -7))} className="rounded-r-none">
-                <ChevronLeft size={18} />
-              </IconButton>
-              <span className="min-w-[120px] border-x border-line px-2 text-center text-sm leading-[44px] font-semibold tabular-nums">
-                {rangoSemana(lunes)}
-              </span>
-              <IconButton label="Semana siguiente" onClick={() => irASemana(addDays(lunes, 7))} className="rounded-l-none">
-                <ChevronRight size={18} />
-              </IconButton>
-            </div>
+            <SelectorSemana lunes={lunes} onChange={irASemana} hoy={hoy} />
             {lunes !== lunesDe(hoy) && (
               <Button variant="ghost" size="md" onClick={() => irASemana(lunesDe(hoy))} className="text-olive">
                 Hoy
