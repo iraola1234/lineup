@@ -23,7 +23,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(data.session)
       setLoading(false)
     })
-    const { data } = supabase.auth.onAuthStateChange((_event, next) => setSession(next))
+    // Las renovaciones de sesión del mismo usuario no cambian nada en la app
+    const { data } = supabase.auth.onAuthStateChange((_event, next) =>
+      setSession((prev) => (prev && next && prev.user.id === next.user.id ? prev : next)),
+    )
     return () => data.subscription.unsubscribe()
   }, [])
 

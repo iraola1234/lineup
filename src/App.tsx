@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
+import { AvisoActualizacion } from './components/Actualizacion'
 import { ToastProvider } from './components/toast'
 import { AuthProvider, useAuth } from './lib/auth'
 import { DataProvider } from './lib/data'
@@ -70,6 +71,7 @@ export default function App() {
         <BrowserRouter>
           <Gate />
         </BrowserRouter>
+        <AvisoActualizacion />
       </ToastProvider>
     </AuthProvider>
   )

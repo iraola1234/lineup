@@ -8,7 +8,9 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // La app no se recarga sola al publicar: avisa y se actualiza cuando la persona quiere
+      registerType: 'prompt',
+      injectRegister: false,
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'Mansalva · Backoffice',
