@@ -24,6 +24,9 @@ const LocalContext = createContext<LocalState | null>(null)
 /** Carga el local del usuario (hoy: uno solo; el modelo admite varios). */
 export function LocalProvider({ children }: { children: ReactNode }) {
   const { session } = useAuth()
+  // Solo importa QUIÉN entró: Supabase renueva la sesión al volver a la pestaña
+  // y eso no tiene que recargar toda la app (se perdía la pantalla abierta).
+  const uid = session?.user.id ?? null
   const [local, setLocal] = useState<Local | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -33,7 +36,7 @@ export function LocalProvider({ children }: { children: ReactNode }) {
 
   /** silencioso: actualiza sin mostrar la pantalla de carga (no se pierde la pantalla actual). */
   const cargar = useCallback(async (silencioso = false) => {
-    if (!supabase || !session) return
+    if (!supabase || !uid) return
     if (!silencioso) setLoading(true)
     // Si la cuenta de esta sesión fue borrada, se cierra la sesión (vuelve al login)
     const { error: errUsuario } = await supabase.auth.getUser()
@@ -44,7 +47,6 @@ export function LocalProvider({ children }: { children: ReactNode }) {
     }
     // Si alguien invitó a este email, entra a ese local
     await supabase.rpc('aceptar_invitaciones')
-    const uid = session.user.id
     const { data: m, error } = await supabase
       .from('miembros')
       .select('rol, local_id, empleado_id, locales(id, nombre, creado_en)')
@@ -72,7 +74,7 @@ export function LocalProvider({ children }: { children: ReactNode }) {
     }
     setError(null)
     setLoading(false)
-  }, [session])
+  }, [uid])
 
   useEffect(() => {
     cargar()
