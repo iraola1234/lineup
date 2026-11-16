@@ -150,7 +150,14 @@ export function PropinasPage() {
               </div>
               <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
                 {reparto.dias.map((d) => (
-                  <MontoDia key={d.fecha} dia={d} hoy={hoy} editable={esAdmin} onGuardar={(n) => guardarDia(d.fecha, n)} />
+                  <MontoDia
+                    key={d.fecha}
+                    dia={d}
+                    hoy={hoy}
+                    editable={esAdmin}
+                    sinTurnos={!semana.asignaciones.some((a) => a.fecha_jornada === d.fecha)}
+                    onGuardar={(n) => guardarDia(d.fecha, n)}
+                  />
                 ))}
               </ul>
               <div className="flex items-baseline justify-between border-t border-line pt-3">
@@ -361,7 +368,21 @@ const leerMonto = (t: string) =>
   )
 
 /** Fila de un día: monto (editable por el admin) y cómo se reparte. */
-function MontoDia({ dia, hoy, editable, onGuardar }: { dia: DiaPropina; hoy: string; editable: boolean; onGuardar: (n: number) => Promise<boolean> }) {
+function MontoDia({
+  dia,
+  hoy,
+  editable,
+  sinTurnos,
+  onGuardar,
+}: {
+  dia: DiaPropina
+  hoy: string
+  editable: boolean
+  /** Sin turnos ese día no hay a quién repartirle: no se carga (salvo que ya haya un monto, para poder borrarlo). */
+  sinTurnos: boolean
+  onGuardar: (n: number) => Promise<boolean>
+}) {
+  const bloqueado = sinTurnos && !(dia.monto > 0)
   const [texto, setTexto] = useState(dia.monto ? Math.round(dia.monto).toLocaleString('es-UY') : '')
   const [estado, setEstado] = useState<'quieto' | 'guardando' | 'ok'>('quieto')
   useEffect(() => {
@@ -385,9 +406,11 @@ function MontoDia({ dia, hoy, editable, onGuardar }: { dia: DiaPropina; hoy: str
       ? 'nadie trabajó'
       : dia.horas > 0
         ? `${dia.personas} pers. · ${fmtHoras(dia.horas)}${dia.monto > 0 ? ` · ${fmtValor(dia.valorHora)}/h` : ''}`
-        : futuro
-          ? ''
-          : 'sin turnos'
+        : sinTurnos
+          ? 'sin turnos'
+          : futuro
+            ? ''
+            : 'nadie que participe trabajó'
 
   return (
     <li className="flex items-center gap-3">
@@ -397,7 +420,14 @@ function MontoDia({ dia, hoy, editable, onGuardar }: { dia: DiaPropina; hoy: str
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         {editable ? (
-          <label className="flex h-10 items-center rounded-xl border border-line bg-card shadow-xs transition-colors focus-within:border-olive focus-within:ring-2 focus-within:ring-olive/20 hover:border-line-strong">
+          <label
+            title={bloqueado ? 'Este día no tiene turnos cargados' : undefined}
+            className={`flex h-10 items-center rounded-xl border transition-colors ${
+              bloqueado
+                ? 'cursor-not-allowed border-divider bg-foot'
+                : 'border-line bg-card shadow-xs focus-within:border-olive focus-within:ring-2 focus-within:ring-olive/20 hover:border-line-strong'
+            }`}
+          >
             <span className="pl-3 font-mono text-sm text-muted">$</span>
             <input
               inputMode="numeric"
@@ -406,9 +436,10 @@ function MontoDia({ dia, hoy, editable, onGuardar }: { dia: DiaPropina; hoy: str
               aria-label={`Propina del ${DIAS[indiceDia(dia.fecha)].toLowerCase()} ${numeroDia(dia.fecha)}`}
               value={texto}
               onChange={(e) => setTexto(e.target.value)}
+              disabled={bloqueado}
               onBlur={guardar}
               onKeyDown={onKey}
-              className="h-full min-w-0 flex-1 bg-transparent px-1.5 font-mono text-[15px] font-semibold outline-none"
+              className="h-full min-w-0 flex-1 bg-transparent px-1.5 font-mono text-[15px] font-semibold outline-none disabled:cursor-not-allowed disabled:text-faint"
             />
             <span className="flex w-8 justify-center text-muted" aria-live="polite">
               {estado === 'guardando' && <Loader2 size={14} className="animate-spin" aria-label="Guardando" />}
