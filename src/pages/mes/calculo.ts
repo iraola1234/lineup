@@ -13,6 +13,12 @@ export type FilaPersona = {
   dias: number
   /** Días en que tenía turno y faltó. */
   ausencias: number
+  /** Días ya pasados sin turno de trabajo (incluye los marcados como día libre). */
+  libres: number
+  /** Fechas de esos días libres. */
+  fechasLibres: string[]
+  /** Días libres marcados a futuro (pedidos con antelación). */
+  libresProgramados: number
   plan: number
   reales: number
   turnos: Asignacion[]
@@ -38,6 +44,7 @@ export type ResumenMes = {
     plan: number
     reales: number
     ausencias: number
+    libres: number
     diasConTurnos: number
     diasCerrados: number
     /** Días ya pasados (o de hoy) con alguna división sin confirmar. */
@@ -70,19 +77,32 @@ export function calcularMes(datos: DatosMes, empleados: Empleado[], areas: Area[
     })
   }
 
+  // Día libre = día ya pasado sin turno. Se cuentan los días con horarios cargados
+  // (para no sumar semanas que todavía no se armaron) o marcados como libres.
+  const conHorarios = new Set(datos.asignaciones.map((a) => a.fecha_jornada))
+  const marcados = new Set(datos.libres.map((l) => `${l.empleado_id}|${l.fecha}`))
+  const fechasMes: string[] = dias.map((d) => d.fecha)
+
   const ordenArea = new Map(areas.map((a, i) => [a.id, i]))
-  const personas: FilaPersona[] = [...new Set(datos.asignaciones.map((a) => a.empleado_id))]
+  const ids = new Set([...datos.asignaciones.map((a) => a.empleado_id), ...datos.libres.map((l) => l.empleado_id), ...empleados.filter((e) => e.activo).map((e) => e.id)])
+  const personas: FilaPersona[] = [...ids]
     .map((id) => empPorId.get(id))
     .filter((e): e is Empleado => !!e)
     .map((emp) => {
       const turnos = datos.asignaciones.filter((a) => a.empleado_id === emp.id)
+      const conTurno = new Set(turnos.map((a) => a.fecha_jornada))
       const vino = new Set(turnos.filter((a) => !a.ausente).map((a) => a.fecha_jornada))
       const falto = new Set(turnos.filter((a) => a.ausente && !vino.has(a.fecha_jornada)).map((a) => a.fecha_jornada))
+      const fechasLibres = fechasMes.filter((f) => f <= hoy && !conTurno.has(f) && (conHorarios.has(f) || marcados.has(`${emp.id}|${f}`)))
+      const libresProgramados = fechasMes.filter((f) => f > hoy && !conTurno.has(f) && marcados.has(`${emp.id}|${f}`)).length
       return {
         emp,
         area: areas.find((a) => a.id === emp.area_id),
         dias: vino.size,
         ausencias: falto.size,
+        libres: fechasLibres.length,
+        fechasLibres,
+        libresProgramados,
         plan: turnos.reduce((s, a) => s + Number(a.horas_plan), 0),
         reales: turnos.reduce((s, a) => s + horasReales(a), 0),
         turnos,
@@ -104,6 +124,7 @@ export function calcularMes(datos: DatosMes, empleados: Empleado[], areas: Area[
       plan: dias.reduce((s, d) => s + d.plan, 0),
       reales: dias.reduce((s, d) => s + d.reales, 0),
       ausencias: personas.reduce((s, p) => s + p.ausencias, 0),
+      libres: personas.reduce((s, p) => s + p.libres, 0),
       diasConTurnos: conTurnos.length,
       diasCerrados: conTurnos.filter((d) => d.estado === 'confirmado').length,
       diasPendientes: conTurnos.filter((d) => d.estado === 'pendiente').length,

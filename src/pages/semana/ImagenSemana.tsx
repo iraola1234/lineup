@@ -1,5 +1,5 @@
 import { forwardRef } from 'react'
-import { TURNO_COLORS, turnoColor } from '../../lib/colors'
+import { LIBRE, TURNO_COLORS, turnoColor } from '../../lib/colors'
 import { fechaCorta, rangoSemana } from '../../lib/fechas'
 import { corta } from '../../lib/time'
 import type { Area, Asignacion, Empleado, TipoTurno } from '../../lib/types'
@@ -14,6 +14,7 @@ type Props = {
   tipos: TipoTurno[]
   asignaciones: Asignacion[]
   turnosDe: (empleadoId: string, fecha: string) => Asignacion[]
+  esLibre: (empleadoId: string, fecha: string) => boolean
 }
 
 const SANS = "'Geist', system-ui, sans-serif"
@@ -25,7 +26,7 @@ const COL_NOMBRE = 210
  * Estilos en línea y ancho fijo (1080 px) para que la imagen salga igual en cualquier pantalla.
  */
 export const ImagenSemana = forwardRef<HTMLDivElement, Props>(function ImagenSemana(
-  { localNombre, lunes, dias, areas, empleados, tipos, asignaciones, turnosDe },
+  { localNombre, lunes, dias, areas, empleados, tipos, asignaciones, turnosDe, esLibre },
   ref,
 ) {
   const usados = new Set(asignaciones.map((a) => a.tipo_turno_id ?? 'otro'))
@@ -108,6 +109,24 @@ export const ImagenSemana = forwardRef<HTMLDivElement, Props>(function ImagenSem
                   const turnos = turnosDe(e.id, d)
                   return (
                     <div key={d} style={{ padding: '5px 4px', height: 50, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      {turnos.length === 0 && esLibre(e.id, d) && (
+                        <div
+                          style={{
+                            flex: 1,
+                            borderRadius: 8,
+                            background: LIBRE.bg,
+                            color: LIBRE.fg,
+                            border: `1px solid ${LIBRE.bd}`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 12,
+                            fontWeight: 700,
+                          }}
+                        >
+                          Día libre
+                        </div>
+                      )}
                       {turnos.map((a) => {
                         const c = turnoColor(a.color)
                         return (

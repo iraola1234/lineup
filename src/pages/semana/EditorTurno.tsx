@@ -1,4 +1,4 @@
-import { Check, Clock, Plus, Trash2 } from 'lucide-react'
+import { Check, Clock, Plus, Trash2, TreePalm } from 'lucide-react'
 import { useState } from 'react'
 import { Avatar, Button, Sheet, inputCls } from '../../components/ui'
 import { TURNO_COLORS, turnoColor } from '../../lib/colors'
@@ -21,10 +21,13 @@ type Props = {
   onAdd: (op: Exclude<OpcionTurno, null>) => void
   /** Quita un turno puntual (cuando hay más de uno). */
   onRemove: (id: string) => void
+  /** Día libre pedido con antelación (vale como sin turno para los cálculos). */
+  libre: boolean
+  onLibre: (on: boolean) => void
 }
 
 /** Hoja para asignar o cambiar el turno de una persona en un día. */
-export function EditorTurno({ open, emp, fecha, turnos, tipos, horasSemana, onClose, onSet, onAdd, onRemove }: Props) {
+export function EditorTurno({ open, emp, fecha, turnos, tipos, horasSemana, onClose, onSet, onAdd, onRemove, libre, onLibre }: Props) {
   if (!emp) return null
   return (
     <Sheet
@@ -44,6 +47,8 @@ export function EditorTurno({ open, emp, fecha, turnos, tipos, horasSemana, onCl
         onSet={onSet}
         onAdd={onAdd}
         onRemove={onRemove}
+        libre={libre}
+        onLibre={onLibre}
       />
     </Sheet>
   )
@@ -57,6 +62,8 @@ function Contenido({
   onSet,
   onAdd,
   onRemove,
+  libre,
+  onLibre,
 }: Omit<Props, 'open' | 'emp' | 'fecha' | 'onClose'> & { emp: Empleado }) {
   const actualOtro = turnos.length === 1 && turnos[0].tipo_turno_id === null ? turnos[0] : null
   const [agregando, setAgregando] = useState(false)
@@ -167,6 +174,28 @@ function Contenido({
             </span>
             <span className="text-xs text-muted">Entrada y salida a mano</span>
           </button>
+          {!agregando && (
+            <button
+              type="button"
+              aria-pressed={libre}
+              onClick={() => onLibre(!libre)}
+              title="Para cuando alguien pide un día con antelación. Cuenta igual que no tener turno."
+              className={`relative flex flex-col items-start gap-1 rounded-2xl border p-3 text-left transition-[border-color,box-shadow,transform,background-color] duration-150 active:scale-[0.97] ${
+                libre ? 'border-[#C9D3E0] bg-[#EEF2F7] shadow-[0_0_0_2px_var(--color-olive)]' : 'border-line hover:border-line-strong hover:bg-hover'
+              }`}
+            >
+              <span className="flex w-full items-center gap-2">
+                <TreePalm size={14} className={libre ? 'text-[#3E5577]' : 'text-muted'} aria-hidden="true" />
+                <span className={`flex-1 text-sm font-semibold ${libre ? 'text-[#3E5577]' : ''}`}>Día libre</span>
+                {libre && (
+                  <span className="flex size-5 items-center justify-center rounded-full bg-olive text-white">
+                    <Check size={12} strokeWidth={3} />
+                  </span>
+                )}
+              </span>
+              <span className={`text-xs ${libre ? 'text-[#3E5577]' : 'text-muted'}`}>Pedido con antelación</span>
+            </button>
+          )}
         </div>
 
         {otroAbierto && (
@@ -204,7 +233,7 @@ function Contenido({
         <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-divider pt-4">
           {turnos.length > 0 && (
             <Button variant="danger" size="sm" onClick={() => onSet(null)} icon={<Trash2 size={15} />}>
-              {turnos.length > 1 ? 'Quitar todos (libre)' : 'Marcar libre'}
+              {turnos.length > 1 ? 'Quitar todos' : 'Quitar turno'}
             </Button>
           )}
           <span className="flex-1" />

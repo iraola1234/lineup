@@ -1,4 +1,4 @@
-import { Check, ChevronDown, CircleCheckBig, Loader2, LockOpen, Moon, Sun, Users } from 'lucide-react'
+import { Check, ChevronDown, CircleCheckBig, Loader2, LockOpen, Moon, Sun, TreePalm, Users } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageBody, PageHeader } from '../../components/PageHeader'
@@ -11,6 +11,8 @@ import { areaDeCierre, claveDivision, nombreDivision, todasLasDivisiones } from 
 import { DIAS, DIAS_LETRA, diasDeSemana, fechaCorta, fechaLarga, indiceDia, jornadaActual, lunesDe, numeroDia } from '../../lib/fechas'
 import { useLocal, useLocalId } from '../../lib/local'
 import { horasReales, useSemana } from '../../lib/semana'
+import { useLibres } from '../../lib/libres'
+import { LIBRE } from '../../lib/colors'
 import { supabase } from '../../lib/supabase'
 import { fmtHoras } from '../../lib/time'
 import type { Asignacion, CierreDivision, Division, Empleado } from '../../lib/types'
@@ -57,6 +59,7 @@ export function CierrePage() {
   const [dia, setDia] = useState(hoy)
   const semana = useSemana(localId, lunes)
   const dias = diasDeSemana(lunes)
+  const libres = useLibres(localId, lunes, dias[6])
   const [abiertas, setAbiertas] = useState<Set<string>>(new Set())
   const [nombres, setNombres] = useState<Map<string, string>>(new Map())
 
@@ -67,7 +70,9 @@ export function CierrePage() {
       .from('miembros')
       .select('usuario_id, nombre, email')
       .eq('local_id', localId)
-      .then(({ data }) => setNombres(new Map((data ?? []).map((m) => [m.usuario_id as string, ((m.nombre as string) || (m.email as string) || '').split(' ')[0]]))))
+      .then(({ data }) =>
+        setNombres(new Map((data ?? []).map((m) => [m.usuario_id as string, ((m.nombre as string) || (m.email as string) || '').split(' ')[0]]))),
+      )
   }, [esAdmin, localId])
 
   const empPorId = useMemo(() => new Map(empleados.map((e) => [e.id, e])), [empleados])
@@ -81,7 +86,10 @@ export function CierrePage() {
           .map((division) => {
             const turnos = delDia
               .filter((a) => areaDeCierre(areas, empPorId.get(a.empleado_id)?.area_id) === division.area_id && a.momento === division.momento)
-              .sort((a, b) => ordenEntrada(a) - ordenEntrada(b) || (empPorId.get(a.empleado_id)?.nombre ?? '').localeCompare(empPorId.get(b.empleado_id)?.nombre ?? ''))
+              .sort(
+                (a, b) =>
+                  ordenEntrada(a) - ordenEntrada(b) || (empPorId.get(a.empleado_id)?.nombre ?? '').localeCompare(empPorId.get(b.empleado_id)?.nombre ?? ''),
+              )
             const cierre = semana.cierres.find((c) => c.fecha === fecha && c.area_id === division.area_id && c.momento === division.momento)
             const estado: Estado = cierre?.confirmado ? 'confirmado' : fecha > hoy ? 'futuro' : 'pendiente'
             return {
@@ -191,7 +199,9 @@ export function CierrePage() {
                   on ? 'border-olive bg-olive text-white shadow-xs' : 'border-line bg-card text-ink hover:border-line-strong hover:bg-hover'
                 }`}
               >
-                <span className={`text-[11px] font-medium ${on ? 'text-white/80' : r.fecha === hoy ? 'text-olive' : 'text-muted'}`}>{DIAS_LETRA[indiceDia(r.fecha)]}</span>
+                <span className={`text-[11px] font-medium ${on ? 'text-white/80' : r.fecha === hoy ? 'text-olive' : 'text-muted'}`}>
+                  {DIAS_LETRA[indiceDia(r.fecha)]}
+                </span>
                 <span className="font-mono text-base leading-none font-semibold">{numeroDia(r.fecha)}</span>
                 <EstadoMini estado={r.estado} invertido={on} />
               </button>
@@ -257,7 +267,9 @@ export function CierrePage() {
                             {r.fecha === hoy && <span className="ml-1.5 text-[11px] font-medium text-olive">Hoy</span>}
                           </span>
                           <span className="font-mono text-[11px] text-muted">
-                            {r.relevantes.length === 0 ? '—' : `${listas}/${r.relevantes.length} confirmadas · ${fmtHoras(r.relevantes.reduce((s, d) => s + d.reales, 0))}`}
+                            {r.relevantes.length === 0
+                              ? '—'
+                              : `${listas}/${r.relevantes.length} confirmadas · ${fmtHoras(r.relevantes.reduce((s, d) => s + d.reales, 0))}`}
                           </span>
                         </span>
                         <EstadoIcono estado={r.estado} />
@@ -281,7 +293,8 @@ export function CierrePage() {
                   </div>
                   {actual.relevantes.length > 0 && (
                     <span className="text-[12px] text-muted">
-                      {confirmadasHoy} de {actual.relevantes.length} {esAdmin ? 'divisiones confirmadas' : actual.relevantes.length === 1 ? 'confirmada' : 'confirmadas'}
+                      {confirmadasHoy} de {actual.relevantes.length}{' '}
+                      {esAdmin ? 'divisiones confirmadas' : actual.relevantes.length === 1 ? 'confirmada' : 'confirmadas'}
                     </span>
                   )}
                 </div>
@@ -296,7 +309,11 @@ export function CierrePage() {
                       <span
                         key={d.clave}
                         className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-medium ${
-                          d.estado === 'confirmado' ? 'border-tarde-bd bg-tarde-bg text-tarde-fg' : d.estado === 'pendiente' ? 'border-warn-line bg-warn-soft text-warn' : 'border-line bg-foot text-muted'
+                          d.estado === 'confirmado'
+                            ? 'border-tarde-bd bg-tarde-bg text-tarde-fg'
+                            : d.estado === 'pendiente'
+                              ? 'border-warn-line bg-warn-soft text-warn'
+                              : 'border-line bg-foot text-muted'
                         }`}
                       >
                         {d.division.momento === 'noche' ? <Moon size={12} aria-hidden="true" /> : <Sun size={12} aria-hidden="true" />}
@@ -308,8 +325,37 @@ export function CierrePage() {
                 )}
               </section>
 
+              {(() => {
+                // Día libre: sin turno ese día (cuenta si hay horarios cargados o si se marcó como libre)
+                const conTurno = new Set(semana.asignaciones.filter((a) => a.fecha_jornada === actual.fecha).map((a) => a.empleado_id))
+                const lista = empleados.filter((e) => e.activo && !conTurno.has(e.id) && (conTurno.size > 0 || libres.esLibre(e.id, actual.fecha)))
+                if (lista.length === 0) return null
+                return (
+                  <section aria-label="Días libres" className="flex flex-col gap-2 rounded-2xl border border-line bg-card px-4 py-3 shadow-card lg:px-5">
+                    <h3 className="m-0 flex items-center gap-1.5 text-[12px] font-semibold text-ink-2">
+                      <TreePalm size={14} aria-hidden="true" style={{ color: LIBRE.fg }} />
+                      Libres este día <span className="font-mono font-normal text-muted">{lista.length}</span>
+                    </h3>
+                    <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
+                      {lista.map((e) => (
+                        <li
+                          key={e.id}
+                          className="rounded-full border px-2.5 py-1 text-[12px] font-medium"
+                          style={{ background: LIBRE.bg, color: LIBRE.fg, borderColor: LIBRE.bd }}
+                          title={libres.esLibre(e.id, actual.fecha) ? 'Día libre marcado' : 'Sin turno'}
+                        >
+                          {e.nombre}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )
+              })()}
+
               {actual.estado === 'futuro' && actual.relevantes.length > 0 && (
-                <Notice tone="info">Este día todavía no llegó. Vas a poder corregir horas y confirmarlo a partir del {fechaLarga(actual.fecha).toLowerCase()}.</Notice>
+                <Notice tone="info">
+                  Este día todavía no llegó. Vas a poder corregir horas y confirmarlo a partir del {fechaLarga(actual.fecha).toLowerCase()}.
+                </Notice>
               )}
               {!esAdmin && actual.divs.length > 0 && actual.relevantes.length === 0 && (
                 <Notice tone="info">Este día no hay turnos en tu división. Abajo podés ver cómo van las demás.</Notice>
@@ -412,7 +458,12 @@ export function CierrePage() {
                                   Reabrir {d.nombre}
                                 </Button>
                               ) : (
-                                <Button variant="primary" onClick={() => confirmar(d)} icon={<CircleCheckBig size={17} />} className="max-sm:h-12 max-sm:w-full">
+                                <Button
+                                  variant="primary"
+                                  onClick={() => confirmar(d)}
+                                  icon={<CircleCheckBig size={17} />}
+                                  className="max-sm:h-12 max-sm:w-full"
+                                >
                                   Confirmar {d.nombre}
                                   <span className="font-mono text-[13px] font-medium opacity-80">· {fmtHoras(d.reales)}</span>
                                 </Button>

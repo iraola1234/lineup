@@ -1,13 +1,13 @@
 import { useMemo } from 'react'
 import { Avatar } from '../../components/ui'
-import { TURNO_COLORS, turnoColor } from '../../lib/colors'
+import { LIBRE, TURNO_COLORS, turnoColor } from '../../lib/colors'
 import type { Empleado, OpcionTurno } from '../../lib/types'
 import { HorasContrato, abreviaturas, rango, type VistaProps } from './helpers'
 
-type Props = VistaProps & { onPick: (emp: Empleado, fecha: string, op: OpcionTurno) => void }
+type Props = VistaProps & { onPick: (emp: Empleado, fecha: string, op: OpcionTurno) => void; onLibre: (emp: Empleado, fecha: string) => void }
 
 /** Asignación rápida: un toque por persona. "O" (otro horario) abre el editor. */
-export function Lista({ grupos, tipos, turnosDe, horasSemana, fecha, onAbrir, onPick }: Props) {
+export function Lista({ grupos, tipos, turnosDe, esLibre, horasSemana, fecha, onAbrir, onPick, onLibre }: Props) {
   const abr = useMemo(() => abreviaturas(tipos), [tipos])
   const neutral = { bg: '#FFFFFF', fg: '#6B6A63', bd: '#E6E4DD' }
 
@@ -26,10 +26,10 @@ export function Lista({ grupos, tipos, turnosDe, horasSemana, fecha, onAbrir, on
               const partido = turnos.length > 1
               const opciones = [
                 {
-                  key: 'libre',
+                  key: 'nada',
                   label: '–',
-                  aria: 'Libre',
-                  on: turnos.length === 0,
+                  aria: 'Sin turno',
+                  on: turnos.length === 0 && !esLibre(e.id, fecha),
                   c: { bg: '#ECEAE4', fg: '#1C1D1A', bd: '#D6D3CA' },
                   pick: () => onPick(e, fecha, null),
                 },
@@ -41,6 +41,14 @@ export function Lista({ grupos, tipos, turnosDe, horasSemana, fecha, onAbrir, on
                   c: turnoColor(t.color),
                   pick: () => onPick(e, fecha, { tipo: t }),
                 })),
+                {
+                  key: 'libre',
+                  label: 'L',
+                  aria: 'Día libre',
+                  on: turnos.length === 0 && esLibre(e.id, fecha),
+                  c: LIBRE,
+                  pick: () => onLibre(e, fecha),
+                },
                 {
                   key: 'otro',
                   label: 'O',

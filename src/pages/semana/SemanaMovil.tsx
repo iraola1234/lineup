@@ -1,5 +1,5 @@
 import { Users } from 'lucide-react'
-import { turnoColor } from '../../lib/colors'
+import { LIBRE, turnoColor } from '../../lib/colors'
 import { DIAS_LETRA, fechaCorta, fechaLarga, indiceDia, numeroDia } from '../../lib/fechas'
 import { corta, fmtHoras } from '../../lib/time'
 import type { Asignacion, Empleado } from '../../lib/types'
@@ -10,6 +10,7 @@ type Props = {
   dias: string[]
   hoy: string
   turnosDe: (empleadoId: string, fecha: string) => Asignacion[]
+  esLibre: (empleadoId: string, fecha: string) => boolean
   horasSemana: Map<string, number>
   onAbrir: (emp: Empleado, fecha: string) => void
   onVerDia: (fecha: string) => void
@@ -20,7 +21,7 @@ type Props = {
  * Celular: la semana completa en una pantalla. Filas = personas, columnas = días.
  * Cada casillero muestra entrada y salida con el color del turno; tocarlo abre el editor.
  */
-export function SemanaMovil({ grupos, dias, hoy, turnosDe, horasSemana, onAbrir, onVerDia, soloLectura = false }: Props) {
+export function SemanaMovil({ grupos, dias, hoy, turnosDe, esLibre, horasSemana, onAbrir, onVerDia, soloLectura = false }: Props) {
   const todos = grupos.flatMap((g) => g.empleados)
   const totales = dias.map((d) => {
     const t = todos.flatMap((e) => turnosDe(e.id, d))
@@ -92,13 +93,24 @@ export function SemanaMovil({ grupos, dias, hoy, turnosDe, horasSemana, onAbrir,
                       disabled={soloLectura}
                       onClick={() => onAbrir(e, d)}
                       aria-label={`${e.nombre}, ${fechaCorta(d)}: ${
-                        turnos.length ? turnos.map((a) => `${a.nombre_turno} ${rango(a)}`).join(', ') : 'libre'
+                        turnos.length ? turnos.map((a) => `${a.nombre_turno} ${rango(a)}`).join(', ') : esLibre(e.id, d) ? 'día libre' : 'sin turno'
                       }`}
                       className={`flex min-h-12 flex-col gap-0.5 border-l border-divider p-[3px] transition-colors enabled:active:bg-press disabled:cursor-default ${
                         d === hoy ? 'bg-olive-soft/40' : ''
                       }`}
                     >
-                      {turnos.length === 0 && <span aria-hidden="true" className="m-auto size-1 rounded-full bg-line-strong" />}
+                      {turnos.length === 0 &&
+                        (esLibre(e.id, d) ? (
+                          <span
+                            aria-hidden="true"
+                            className="flex flex-1 items-center justify-center rounded-md border text-[10px] font-semibold"
+                            style={{ background: LIBRE.bg, color: LIBRE.fg, borderColor: LIBRE.bd }}
+                          >
+                            Libre
+                          </span>
+                        ) : (
+                          <span aria-hidden="true" className="m-auto size-1 rounded-full bg-line-strong" />
+                        ))}
                       {turnos.map((a) => {
                         const c = turnoColor(a.color)
                         return (

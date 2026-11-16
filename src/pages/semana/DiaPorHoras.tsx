@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Avatar } from '../../components/ui'
-import { turnoColor } from '../../lib/colors'
+import { LIBRE, turnoColor } from '../../lib/colors'
 import { hoyISO } from '../../lib/fechas'
 import { EJE_DESDE, EJE_HORAS, HORAS_EJE, geometria, rango, type VistaProps } from './helpers'
 
@@ -22,7 +22,7 @@ function useAhora(activo: boolean) {
 }
 
 /** Un día por horas: columnas = horas (05–02), filas = personas por área. Tocar una fila abre el editor. */
-export function DiaPorHoras({ grupos, turnosDe, fecha, onAbrir, soloLectura = false }: VistaProps) {
+export function DiaPorHoras({ grupos, turnosDe, esLibre, fecha, onAbrir, soloLectura = false }: VistaProps) {
   const ahora = useAhora(fecha === hoyISO())
 
   return (
@@ -64,7 +64,8 @@ export function DiaPorHoras({ grupos, turnosDe, fecha, onAbrir, soloLectura = fa
 
             {empleados.map((e, idx) => {
               const turnos = turnosDe(e.id, fecha)
-              const resumen = turnos.length ? turnos.map((a) => `${a.nombre_turno} ${rango(a)}`).join(', ') : 'libre'
+              const libre = turnos.length === 0 && esLibre(e.id, fecha)
+              const resumen = turnos.length ? turnos.map((a) => `${a.nombre_turno} ${rango(a)}`).join(', ') : libre ? 'día libre' : 'sin turno'
               return (
                 <button
                   key={e.id}
@@ -87,9 +88,17 @@ export function DiaPorHoras({ grupos, turnosDe, fecha, onAbrir, soloLectura = fa
                     </span>
                   </span>
                   <span className="timeline-grid relative h-8 min-w-0 flex-1">
-                    {turnos.length === 0 && (
+                    {libre && (
+                      <span
+                        className="absolute inset-y-0.5 left-0.5 flex items-center rounded-lg border px-2.5 text-xs font-semibold"
+                        style={{ background: LIBRE.bg, color: LIBRE.fg, borderColor: LIBRE.bd }}
+                      >
+                        Día libre
+                      </span>
+                    )}
+                    {turnos.length === 0 && !libre && !soloLectura && (
                       <span className="absolute inset-y-0 left-1 flex items-center text-xs text-faint transition-colors group-hover:text-muted">
-                        Libre · asignar
+                        Sin turno · asignar
                       </span>
                     )}
                     {turnos.map((a) => {

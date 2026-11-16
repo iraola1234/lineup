@@ -1,25 +1,16 @@
-import {
-  CalendarSync,
-  CalendarDays,
-  Copy,
-  Eraser,
-  Loader2,
-  MoreHorizontal,
-  Rows3,
-  Share,
-  Clock3,
-  Users,
-} from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { CalendarSync, CalendarDays, CalendarRange, Copy, Eraser, Loader2, MoreHorizontal, Rows3, Share, Clock3, Users } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageBody, PageHeader } from '../../components/PageHeader'
-import { SelectorSemana } from '../../components/Selectores'
+import { SelectorMes, SelectorSemana } from '../../components/Selectores'
 import { useToast } from '../../components/toast'
 import { Button, ConfirmDialog, EmptyState, IconButton, Menu, Segmented, Skeleton, type MenuItem } from '../../components/ui'
 import { TURNO_COLORS, turnoColor } from '../../lib/colors'
 import { useData } from '../../lib/data'
 import { DIAS_LETRA, addDays, diasDeSemana, fechaCorta, fechaLarga, hoyISO, indiceDia, lunesDe, numeroDia, rangoSemana } from '../../lib/fechas'
 import { useLocal, useLocalId } from '../../lib/local'
+import { useLibres } from '../../lib/libres'
+import { nombreMes, useMes } from '../../lib/mes'
 import { aFila, copiarFila, filaDesdeOpcion, useSemana, type Cambio } from '../../lib/semana'
 import { corta, fmtHoras } from '../../lib/time'
 import type { Asignacion, Empleado, OpcionTurno } from '../../lib/types'
@@ -30,9 +21,10 @@ import { EditorTurno } from './EditorTurno'
 import { ES_MAC, GrillaSemana } from './GrillaSemana'
 import { horasTotales, porArea } from './helpers'
 import { Lista } from './Lista'
+import { MesCalendario } from './MesCalendario'
 import { SemanaMovil } from './SemanaMovil'
 
-type Vista = 'semana' | 'dia' | 'lista'
+type Vista = 'semana' | 'dia' | 'lista' | 'mes'
 type Pendiente = { titulo: string; mensaje: string; label: string; danger?: boolean; run: () => Promise<void> }
 
 export function SemanaPage() {
@@ -57,8 +49,22 @@ export function SemanaPage() {
   const [busy, setBusy] = useState(false)
   const [compartir, setCompartir] = useState(false)
 
+  const [mes, setMes] = useState(() => hoy.slice(0, 7))
+  const datosMes = useMes(localId, mes)
+  const recargarMes = datosMes.reload
+  useEffect(() => {
+    if (vista === 'mes') recargarMes()
+  }, [vista, recargarMes])
+  const abrirDiaDelMes = (fecha: string) => {
+    setLunes(lunesDe(fecha))
+    setDia(fecha)
+    setVista('dia')
+  }
+
   const semana = useSemana(localId, lunes)
   const dias = diasDeSemana(lunes)
+  const libres = useLibres(localId, lunes, dias[6])
+  const esLibre = libres.esLibre
 
   const indice = useMemo(() => {
     const m = new Map<string, Asignacion[]>()
@@ -102,7 +108,33 @@ export function SemanaPage() {
   const describir = (op: OpcionTurno) =>
     op === null ? 'libre' : 'tipo' in op ? `${op.tipo.nombre} ${corta(op.tipo.inicio)}–${corta(op.tipo.fin)}` : `${op.otro.inicio}–${op.otro.fin}`
 
+  /** Asignar un turno a alguien en su día libre quita la marca. */
+  const sacarLibre = (empId: string, fecha: string) => {
+    if (esLibre(empId, fecha)) libres.marcar(empId, fecha, false)
+  }
+
+  const marcarLibre = (emp: Empleado, fecha: string, on: boolean) => {
+    const nombre = `${emp.nombre.split(' ')[0]} · ${fechaCorta(fecha)}`
+    const turnos = turnosDe(emp.id, fecha)
+    // Si tenía turnos ese día, se quitan (con deshacer)
+    const quitados = on && turnos.length ? semana.aplicar([{ desde: fecha, hasta: fecha, empleado: emp.id, filas: [] }]) : null
+    libres.marcar(emp.id, fecha, on).then((ok) => {
+      if (!ok) toast.show('No se pudo guardar el día libre. Probá de nuevo.', { tone: 'error' })
+    })
+    toast.show(on ? `${nombre}: día libre` : `${nombre}: ya no es día libre`, {
+      action: {
+        label: 'Deshacer',
+        onClick: () => {
+          libres.marcar(emp.id, fecha, !on)
+          if (quitados) semana.aplicar(quitados.deshacer)
+        },
+      },
+    })
+    setEditor(null)
+  }
+
   const setTurno = (emp: Empleado, fecha: string, op: OpcionTurno, cerrar = true) => {
+    if (op) sacarLibre(emp.id, fecha)
     aplicar(
       [{ desde: fecha, hasta: fecha, empleado: emp.id, filas: op ? [filaDesdeOpcion(emp.id, fecha, op)] : [] }],
       `${emp.nombre.split(' ')[0]} · ${fechaCorta(fecha)}: ${describir(op)}`,
@@ -111,6 +143,7 @@ export function SemanaPage() {
   }
 
   const addTurno = (emp: Empleado, fecha: string, op: Exclude<OpcionTurno, null>) => {
+    sacarLibre(emp.id, fecha)
     const actuales = turnosDe(emp.id, fecha).map(aFila)
     aplicar(
       [{ desde: fecha, hasta: fecha, empleado: emp.id, filas: [...actuales, filaDesdeOpcion(emp.id, fecha, op)] }],
@@ -120,14 +153,18 @@ export function SemanaPage() {
   }
 
   const removeTurno = (emp: Empleado, fecha: string, id: string) => {
-    const resto = turnosDe(emp.id, fecha).filter((a) => a.id !== id).map(aFila)
+    const resto = turnosDe(emp.id, fecha)
+      .filter((a) => a.id !== id)
+      .map(aFila)
     aplicar([{ desde: fecha, hasta: fecha, empleado: emp.id, filas: resto }], `${emp.nombre.split(' ')[0]} · ${fechaCorta(fecha)}: turno quitado`)
   }
 
   const eliminarTurno = (id: string) => {
     const a = semana.asignaciones.find((x) => x.id === id)
     if (!a) return
-    const resto = turnosDe(a.empleado_id, a.fecha_jornada).filter((x) => x.id !== id).map(aFila)
+    const resto = turnosDe(a.empleado_id, a.fecha_jornada)
+      .filter((x) => x.id !== id)
+      .map(aFila)
     aplicar(
       [{ desde: a.fecha_jornada, hasta: a.fecha_jornada, empleado: a.empleado_id, filas: resto }],
       `Turno eliminado · ${(empleados.find((e) => e.id === a.empleado_id)?.nombre ?? '').split(' ')[0]} ${fechaCorta(a.fecha_jornada)}`,
@@ -139,10 +176,13 @@ export function SemanaPage() {
     if (!a || (a.empleado_id === destino.id && a.fecha_jornada === fecha)) return
     const cambios: Cambio[] = []
     if (!copiar) {
-      const restoOrigen = turnosDe(a.empleado_id, a.fecha_jornada).filter((x) => x.id !== id).map(aFila)
+      const restoOrigen = turnosDe(a.empleado_id, a.fecha_jornada)
+        .filter((x) => x.id !== id)
+        .map(aFila)
       cambios.push({ desde: a.fecha_jornada, hasta: a.fecha_jornada, empleado: a.empleado_id, filas: restoOrigen })
     }
     cambios.push({ desde: fecha, hasta: fecha, empleado: destino.id, filas: [copiarFila(a, { empleado_id: destino.id, fecha_jornada: fecha })] })
+    sacarLibre(destino.id, fecha)
     aplicar(cambios, `${copiar ? 'Copiado' : 'Movido'} a ${destino.nombre.split(' ')[0]} · ${fechaCorta(fecha)}`)
   }
 
@@ -164,18 +204,21 @@ export function SemanaPage() {
 
   const copiarDia = (fecha: string) => {
     const ayer = addDays(fecha, -1)
-    confirmarSi(semana.asignaciones.some((a) => a.fecha_jornada === fecha), {
-      titulo: `¿Reemplazar el ${fechaCorta(fecha)}?`,
-      mensaje: `Este día ya tiene turnos. Se reemplazan por los del ${fechaCorta(ayer)}. Vas a poder deshacerlo.`,
-      label: 'Copiar día',
-      run: async () => {
-        const src = ayer >= lunes ? semana.asignaciones.filter((a) => a.fecha_jornada === ayer) : await semana.leerRango(ayer, ayer)
-        if (!src) return toast.show('No se pudo leer el día anterior.', { tone: 'error' })
-        if (src.length === 0) return toast.show(`El ${fechaCorta(ayer)} no tiene turnos para copiar.`, { tone: 'error' })
-        const filas = src.filter((a) => activos.has(a.empleado_id)).map((a) => copiarFila(a, { fecha_jornada: fecha }))
-        aplicar([{ desde: fecha, hasta: fecha, empleado: null, filas }], `Se copiaron ${filas.length} turnos del ${fechaCorta(ayer)}`)
+    confirmarSi(
+      semana.asignaciones.some((a) => a.fecha_jornada === fecha),
+      {
+        titulo: `¿Reemplazar el ${fechaCorta(fecha)}?`,
+        mensaje: `Este día ya tiene turnos. Se reemplazan por los del ${fechaCorta(ayer)}. Vas a poder deshacerlo.`,
+        label: 'Copiar día',
+        run: async () => {
+          const src = ayer >= lunes ? semana.asignaciones.filter((a) => a.fecha_jornada === ayer) : await semana.leerRango(ayer, ayer)
+          if (!src) return toast.show('No se pudo leer el día anterior.', { tone: 'error' })
+          if (src.length === 0) return toast.show(`El ${fechaCorta(ayer)} no tiene turnos para copiar.`, { tone: 'error' })
+          const filas = src.filter((a) => activos.has(a.empleado_id)).map((a) => copiarFila(a, { fecha_jornada: fecha }))
+          aplicar([{ desde: fecha, hasta: fecha, empleado: null, filas }], `Se copiaron ${filas.length} turnos del ${fechaCorta(ayer)}`)
+        },
       },
-    })
+    )
   }
 
   const vaciarDia = (fecha: string) => {
@@ -191,7 +234,12 @@ export function SemanaPage() {
   }
 
   const accionesDia = (fecha: string): MenuItem[] => [
-    { label: 'Copiar día anterior', description: `Trae los turnos del ${fechaCorta(addDays(fecha, -1))}`, icon: <Copy size={16} />, onSelect: () => copiarDia(fecha) },
+    {
+      label: 'Copiar día anterior',
+      description: `Trae los turnos del ${fechaCorta(addDays(fecha, -1))}`,
+      icon: <Copy size={16} />,
+      onSelect: () => copiarDia(fecha),
+    },
     { label: 'Vaciar día', description: 'Quita todos los turnos de ese día', icon: <Eraser size={16} />, danger: true, onSelect: () => vaciarDia(fecha) },
   ]
 
@@ -227,7 +275,13 @@ export function SemanaPage() {
     <>
       <PageHeader
         title="Horarios"
-        subtitle={vista === 'semana' ? `${local?.nombre ?? ''} · semana del ${rangoSemana(lunes)}` : fechaLarga(dia)}
+        subtitle={
+          vista === 'mes'
+            ? `${local?.nombre ?? ''} · ${nombreMes(mes)}`
+            : vista === 'semana'
+              ? `${local?.nombre ?? ''} · semana del ${rangoSemana(lunes)}`
+              : fechaLarga(dia)
+        }
         actions={
           <>
             {semana.guardando && (
@@ -236,7 +290,7 @@ export function SemanaPage() {
                 Guardando…
               </span>
             )}
-            {desktop ? (
+            {vista === 'mes' ? null : desktop ? (
               <>
                 {!soloLectura && (
                   <Button onClick={copiarSemana} icon={<CalendarSync size={16} />} disabled={cargando}>
@@ -252,28 +306,41 @@ export function SemanaPage() {
                 <IconButton label="Compartir la semana" onClick={() => setCompartir(true)} disabled={cargando || visibles.length === 0}>
                   <Share size={20} />
                 </IconButton>
-                {!soloLectura && <Menu
-                  items={menuMovil}
-                  trigger={({ toggle, ref, open }) => (
-                    <IconButton ref={ref} label="Más acciones" onClick={toggle} aria-expanded={open} className={open ? 'bg-press text-ink' : ''}>
-                      <MoreHorizontal size={20} />
-                    </IconButton>
-                  )}
-                />}
+                {!soloLectura && (
+                  <Menu
+                    items={menuMovil}
+                    trigger={({ toggle, ref, open }) => (
+                      <IconButton ref={ref} label="Más acciones" onClick={toggle} aria-expanded={open} className={open ? 'bg-press text-ink' : ''}>
+                        <MoreHorizontal size={20} />
+                      </IconButton>
+                    )}
+                  />
+                )}
               </>
             )}
           </>
         }
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-1">
-            <SelectorSemana lunes={lunes} onChange={irASemana} hoy={hoy} />
-            {lunes !== lunesDe(hoy) && (
-              <Button variant="ghost" size="md" onClick={() => irASemana(lunesDe(hoy))} className="text-olive">
-                Hoy
-              </Button>
-            )}
-          </div>
+          {vista === 'mes' ? (
+            <div className="flex items-center gap-1">
+              <SelectorMes mes={mes} onChange={setMes} mesActual={hoy.slice(0, 7)} />
+              {mes !== hoy.slice(0, 7) && (
+                <Button variant="ghost" size="md" onClick={() => setMes(hoy.slice(0, 7))} className="text-olive">
+                  Hoy
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-1">
+              <SelectorSemana lunes={lunes} onChange={irASemana} hoy={hoy} />
+              {lunes !== lunesDe(hoy) && (
+                <Button variant="ghost" size="md" onClick={() => irASemana(lunesDe(hoy))} className="text-olive">
+                  Hoy
+                </Button>
+              )}
+            </div>
+          )}
           <Segmented
             label="Vista"
             value={vista}
@@ -282,11 +349,12 @@ export function SemanaPage() {
             options={[
               { value: 'semana', label: 'Semana', icon: <CalendarDays size={15} /> },
               { value: 'dia', label: 'Día por horas', icon: <Clock3 size={15} /> },
+              { value: 'mes', label: 'Mes', icon: <CalendarRange size={15} /> },
             ]}
           />
         </div>
 
-        {vista !== 'semana' && (
+        {(vista === 'dia' || vista === 'lista') && (
           <div className="grid grid-cols-7 gap-1.5 lg:max-w-[640px]">
             {dias.map((d) => {
               const on = d === dia
@@ -320,7 +388,12 @@ export function SemanaPage() {
 
       <PageBody>
         {errorCarga ? (
-          <EmptyState icon={<CalendarDays size={22} />} title="No pudimos cargar los horarios" description={`${errorCarga} Revisá la conexión.`} action={<Button onClick={() => semana.reload()}>Reintentar</Button>} />
+          <EmptyState
+            icon={<CalendarDays size={22} />}
+            title="No pudimos cargar los horarios"
+            description={`${errorCarga} Revisá la conexión.`}
+            action={<Button onClick={() => semana.reload()}>Reintentar</Button>}
+          />
         ) : cargando ? (
           <div className="flex flex-col gap-3" aria-busy="true" aria-label="Cargando">
             <Skeleton className="h-10 w-full max-w-sm" />
@@ -340,7 +413,10 @@ export function SemanaPage() {
             title="Todavía no cargaste a tu equipo"
             description="Sumá a las personas en Configuración y después armás la semana desde acá."
             action={
-              <Link to="/configuracion" className="inline-flex h-11 items-center rounded-xl bg-olive px-4 text-sm font-semibold text-white transition-colors hover:bg-olive-dark">
+              <Link
+                to="/configuracion"
+                className="inline-flex h-11 items-center rounded-xl bg-olive px-4 text-sm font-semibold text-white transition-colors hover:bg-olive-dark"
+              >
                 Cargar el equipo
               </Link>
             }
@@ -355,12 +431,13 @@ export function SemanaPage() {
                 options={[
                   { value: 'dia', label: 'Día', icon: <Clock3 size={15} /> },
                   { value: 'semana', label: 'Semana', icon: <CalendarDays size={15} /> },
+                  { value: 'mes', label: 'Mes', icon: <CalendarRange size={15} /> },
                   ...(soloLectura ? [] : [{ value: 'lista' as const, label: 'Rápida', icon: <Rows3 size={15} /> }]),
                 ]}
               />
             )}
 
-            {semana.asignaciones.length === 0 && (
+            {semana.asignaciones.length === 0 && vista !== 'mes' && (
               <div className="flex flex-col gap-3 rounded-2xl border border-olive-line bg-olive-soft/60 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-col gap-0.5">
                   <span className="text-sm font-semibold text-olive-darker">La semana del {rangoSemana(lunes)} está vacía</span>
@@ -378,7 +455,7 @@ export function SemanaPage() {
               </div>
             )}
 
-            {vista !== 'semana' && (
+            {(vista === 'dia' || vista === 'lista') && (
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="no-scrollbar flex items-center gap-2 overflow-x-auto">
                   <span className="flex items-center gap-1.5 rounded-full border border-line bg-card px-3 py-1.5 text-[13px] whitespace-nowrap shadow-xs">
@@ -417,6 +494,7 @@ export function SemanaPage() {
                 dias={dias}
                 hoy={hoy}
                 turnosDe={turnosDe}
+                esLibre={esLibre}
                 horasSemana={horasSemana}
                 onAbrir={(emp, fecha) => {
                   setDia(fecha)
@@ -435,6 +513,7 @@ export function SemanaPage() {
                 dias={dias}
                 hoy={hoy}
                 turnosDe={turnosDe}
+                esLibre={esLibre}
                 horasSemana={horasSemana}
                 onAbrir={(emp, fecha) => {
                   setDia(fecha)
@@ -447,23 +526,37 @@ export function SemanaPage() {
               />
             )}
             {vista === 'dia' && (
-              <DiaPorHoras grupos={grupos} tipos={tipos} turnosDe={turnosDe} horasSemana={horasSemana} fecha={dia} onAbrir={(emp, fecha) => setEditor({ emp, fecha })} soloLectura={soloLectura} />
+              <DiaPorHoras
+                grupos={grupos}
+                tipos={tipos}
+                turnosDe={turnosDe}
+                esLibre={esLibre}
+                horasSemana={horasSemana}
+                fecha={dia}
+                onAbrir={(emp, fecha) => setEditor({ emp, fecha })}
+                soloLectura={soloLectura}
+              />
             )}
             {vista === 'lista' && (
               <Lista
                 grupos={grupos}
                 tipos={tipos}
                 turnosDe={turnosDe}
+                esLibre={esLibre}
                 horasSemana={horasSemana}
                 fecha={dia}
                 onAbrir={(emp, fecha) => setEditor({ emp, fecha })}
+                onLibre={(emp, fecha) => marcarLibre(emp, fecha, true)}
                 onPick={(emp, fecha, op) => setTurno(emp, fecha, op, false)}
               />
             )}
 
+            {vista === 'mes' && <MesCalendario mes={mes} hoy={hoy} datos={datosMes.datos} grupos={grupos} desktop={desktop} onDia={abrirDiaDelMes} />}
+
             {vista === 'semana' && desktop && !soloLectura && (
               <p className="m-0 text-xs text-faint">
-                Arrastrá un turno para moverlo. Mantené {ES_MAC ? '⌘' : 'Ctrl'} mientras arrastrás para copiarlo, o soltalo en la papelera para eliminarlo. Desde el menú ··· de cada día podés copiar el día anterior o vaciarlo.
+                Arrastrá un turno para moverlo. Mantené {ES_MAC ? '⌘' : 'Ctrl'} mientras arrastrás para copiarlo, o soltalo en la papelera para eliminarlo.
+                Desde el menú ··· de cada día podés copiar el día anterior o vaciarlo.
               </p>
             )}
           </>
@@ -481,6 +574,8 @@ export function SemanaPage() {
         onSet={(op) => editor && setTurno(editor.emp, editor.fecha, op)}
         onAdd={(op) => editor && addTurno(editor.emp, editor.fecha, op)}
         onRemove={(id) => editor && removeTurno(editor.emp, editor.fecha, id)}
+        libre={editor ? esLibre(editor.emp.id, editor.fecha) : false}
+        onLibre={(on) => editor && marcarLibre(editor.emp, editor.fecha, on)}
       />
 
       <ConfirmDialog
@@ -511,6 +606,7 @@ export function SemanaPage() {
         tipos={tipos}
         asignaciones={semana.asignaciones}
         turnosDe={turnosDe}
+        esLibre={esLibre}
       />
     </>
   )

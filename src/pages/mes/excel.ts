@@ -70,6 +70,7 @@ export async function exportarExcel(r: ResumenMes, mes: string, local: string) {
     { header: 'Persona', width: 26 },
     { header: 'Puesto', width: 18 },
     { header: 'Días trabajados', width: 15, fmt: '0' },
+    { header: 'Días libres', width: 12, fmt: '0' },
     { header: 'Ausencias', width: 11, fmt: '0' },
     { header: 'Horas planificadas', width: 18, fmt: FMT_HORAS },
     { header: 'Horas reales', width: 14, fmt: FMT_HORAS },
@@ -78,11 +79,11 @@ export async function exportarExcel(r: ResumenMes, mes: string, local: string) {
   preparar(res, `${titulo} · Resumen`, colsRes)
   r.personas.forEach((p, i) => {
     const n = 4 + i
-    res.getRow(n).values = [p.area?.nombre ?? '', p.emp.nombre, p.emp.puesto, p.dias, p.ausencias, p.plan, p.reales, { formula: `G${n}-F${n}` }]
+    res.getRow(n).values = [p.area?.nombre ?? '', p.emp.nombre, p.emp.puesto, p.dias, p.libres, p.ausencias, p.plan, p.reales, { formula: `H${n}-G${n}` }]
   })
   const finRes = 3 + r.personas.length
   bordes(res, 4, finRes, colsRes.length)
-  filaTotal(res, finRes + 1, [4, 5, 6, 7, 8], finRes, colsRes.length)
+  filaTotal(res, finRes + 1, [4, 5, 6, 7, 8, 9], finRes, colsRes.length)
   if (r.totales.diasPendientes > 0) {
     res.getCell(`A${finRes + 3}`).value = `Atención: ${r.totales.diasPendientes} día(s) sin cerrar. En las divisiones sin confirmar se cuentan las horas planificadas.`
     res.getCell(`A${finRes + 3}`).font = { italic: true, color: { argb: 'FF8A5A12' } }

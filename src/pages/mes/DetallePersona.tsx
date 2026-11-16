@@ -1,5 +1,5 @@
 import { Avatar, Pill, Sheet, pillDanger } from '../../components/ui'
-import { turnoColor } from '../../lib/colors'
+import { LIBRE, turnoColor } from '../../lib/colors'
 import { fechaCorta } from '../../lib/fechas'
 import { horasReales } from '../../lib/semana'
 import { fmtHoras } from '../../lib/time'
@@ -25,41 +25,78 @@ export function DetallePersona({ persona, resumen, onClose }: { persona: FilaPer
       {persona && (
         <div className="flex flex-col gap-4">
           <dl className="m-0 grid grid-cols-3 gap-2">
-            <Dato titulo="Horas reales" valor={sinUnidad(persona.reales)} detalle={`plan ${sinUnidad(persona.plan)}`} />
-            <Dato titulo="Días" valor={String(persona.dias)} detalle={persona.ausencias ? `${persona.ausencias} ausencia${persona.ausencias > 1 ? 's' : ''}` : 'sin ausencias'} alerta={persona.ausencias > 0} />
-            <Dato titulo="Diferencia" valor={persona.reales === persona.plan ? '0' : `${persona.reales > persona.plan ? '+' : '−'}${sinUnidad(Math.abs(persona.reales - persona.plan))}`} detalle="real vs. plan" alerta={persona.reales < persona.plan} />
+            <Dato
+              titulo="Horas reales"
+              valor={sinUnidad(persona.reales)}
+              detalle={`plan ${sinUnidad(persona.plan)}${persona.reales !== persona.plan ? ` · ${persona.reales > persona.plan ? '+' : '−'}${sinUnidad(Math.abs(persona.reales - persona.plan))}` : ''}`}
+            />
+            <Dato
+              titulo="Días"
+              valor={String(persona.dias)}
+              detalle={persona.ausencias ? `${persona.ausencias} ausencia${persona.ausencias > 1 ? 's' : ''}` : 'sin ausencias'}
+              alerta={persona.ausencias > 0}
+            />
+            <Dato
+              titulo="Días libres"
+              valor={String(persona.libres)}
+              detalle={
+                persona.libresProgramados > 0 ? `+${persona.libresProgramados} marcado${persona.libresProgramados > 1 ? 's' : ''} a futuro` : 'hasta hoy'
+              }
+            />
           </dl>
 
-          <div className="overflow-hidden rounded-2xl border border-line">
-            <ul className="m-0 list-none p-0">
-              {turnos.map((a, i) => {
-                const primero = i === 0 || turnos[i - 1].fecha_jornada !== a.fecha_jornada
-                const h = horasReales(a)
-                const corregido = !a.ausente && a.horas_reales !== null && Number(a.horas_reales) !== Number(a.horas_plan)
-                const pendiente = !!resumen && !resumen.confirmado(a) && estadoDe.get(a.fecha_jornada) !== 'futuro'
-                const c = turnoColor(a.color)
-                return (
-                  <li key={a.id} className={`flex items-center gap-3 px-3.5 py-2.5 ${primero && i > 0 ? 'border-t border-divider' : ''} ${a.ausente ? 'bg-[#FCF8F7]' : ''}`}>
-                    <span className={`w-14 shrink-0 text-[13px] font-semibold ${primero ? '' : 'invisible'}`}>{fechaCorta(a.fecha_jornada)}</span>
-                    <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px]">
-                      <span aria-hidden="true" className="size-2 shrink-0 rounded-full border" style={{ background: c.bg, borderColor: c.bd }} />
-                      <span className="truncate text-ink-2">
-                        {a.nombre_turno} <span className="font-mono text-muted">{rango(a)}</span>
-                      </span>
-                      {pendiente && <span className="shrink-0 text-[11px] text-warn">· sin cerrar</span>}
-                    </span>
-                    {a.ausente ? (
-                      <Pill {...pillDanger}>Ausente</Pill>
-                    ) : (
-                      <span className="flex shrink-0 flex-col items-end">
-                        <span className={`font-mono text-[13px] font-semibold tabular-nums ${corregido ? 'text-olive' : ''}`}>{fmtHoras(h)}</span>
-                      </span>
-                    )}
+          {persona.fechasLibres.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <h3 className="m-0 text-[11px] font-semibold tracking-wide text-muted uppercase">Días libres</h3>
+              <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
+                {persona.fechasLibres.map((f) => (
+                  <li
+                    key={f}
+                    className="rounded-full border px-2.5 py-1 text-[12px] font-medium"
+                    style={{ background: LIBRE.bg, color: LIBRE.fg, borderColor: LIBRE.bd }}
+                  >
+                    {fechaCorta(f)}
                   </li>
-                )
-              })}
-            </ul>
-          </div>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {turnos.length > 0 && (
+            <div className="overflow-hidden rounded-2xl border border-line">
+              <ul className="m-0 list-none p-0">
+                {turnos.map((a, i) => {
+                  const primero = i === 0 || turnos[i - 1].fecha_jornada !== a.fecha_jornada
+                  const h = horasReales(a)
+                  const corregido = !a.ausente && a.horas_reales !== null && Number(a.horas_reales) !== Number(a.horas_plan)
+                  const pendiente = !!resumen && !resumen.confirmado(a) && estadoDe.get(a.fecha_jornada) !== 'futuro'
+                  const c = turnoColor(a.color)
+                  return (
+                    <li
+                      key={a.id}
+                      className={`flex items-center gap-3 px-3.5 py-2.5 ${primero && i > 0 ? 'border-t border-divider' : ''} ${a.ausente ? 'bg-[#FCF8F7]' : ''}`}
+                    >
+                      <span className={`w-14 shrink-0 text-[13px] font-semibold ${primero ? '' : 'invisible'}`}>{fechaCorta(a.fecha_jornada)}</span>
+                      <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px]">
+                        <span aria-hidden="true" className="size-2 shrink-0 rounded-full border" style={{ background: c.bg, borderColor: c.bd }} />
+                        <span className="truncate text-ink-2">
+                          {a.nombre_turno} <span className="font-mono text-muted">{rango(a)}</span>
+                        </span>
+                        {pendiente && <span className="shrink-0 text-[11px] text-warn">· sin cerrar</span>}
+                      </span>
+                      {a.ausente ? (
+                        <Pill {...pillDanger}>Ausente</Pill>
+                      ) : (
+                        <span className="flex shrink-0 flex-col items-end">
+                          <span className={`font-mono text-[13px] font-semibold tabular-nums ${corregido ? 'text-olive' : ''}`}>{fmtHoras(h)}</span>
+                        </span>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </Sheet>

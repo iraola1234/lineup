@@ -16,3 +16,6 @@ export const COLOR_KEYS = Object.keys(TURNO_COLORS)
 export function turnoColor(key: string): TurnoColor {
   return TURNO_COLORS[key] ?? TURNO_COLORS.arena
 }
+
+/** Día libre pedido con antelación: azul grisáceo, distinto de cualquier turno. */
+export const LIBRE = { bg: '#EEF2F7', fg: '#3E5577', bd: '#C9D3E0' }

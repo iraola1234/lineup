@@ -1,8 +1,8 @@
-import { Copy, MoreHorizontal, Move, Plus, Trash2, Users } from 'lucide-react'
+import { Copy, MoreHorizontal, Move, Plus, Trash2, TreePalm, Users } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Avatar, Menu, type MenuItem } from '../../components/ui'
-import { turnoColor } from '../../lib/colors'
+import { LIBRE, turnoColor } from '../../lib/colors'
 import { DIAS_ABR, fechaCorta, indiceDia, numeroDia } from '../../lib/fechas'
 import { fmtHoras } from '../../lib/time'
 import type { Asignacion, Empleado } from '../../lib/types'
@@ -13,6 +13,7 @@ type Props = {
   dias: string[]
   hoy: string
   turnosDe: (empleadoId: string, fecha: string) => Asignacion[]
+  esLibre: (empleadoId: string, fecha: string) => boolean
   horasSemana: Map<string, number>
   onAbrir: (emp: Empleado, fecha: string) => void
   onMover: (asignacionId: string, destino: Empleado, fecha: string, copiar: boolean) => void
@@ -48,7 +49,7 @@ const UMBRAL = 5 // px que hay que mover antes de que empiece el arrastre (si no
  * Clic en un casillero para asignar. Arrastrar un turno lo mueve; con ⌘ (Ctrl en Windows) lo copia;
  * soltarlo en la papelera lo elimina.
  */
-export function GrillaSemana({ grupos, dias, hoy, turnosDe, horasSemana, onAbrir, onMover, onEliminar, accionesDia, soloLectura = false }: Props) {
+export function GrillaSemana({ grupos, dias, hoy, turnosDe, esLibre, horasSemana, onAbrir, onMover, onEliminar, accionesDia, soloLectura = false }: Props) {
   const todos = useMemo(() => grupos.flatMap((g) => g.empleados), [grupos])
   const porId = useMemo(() => new Map(todos.map((e) => [e.id, e])), [todos])
 
@@ -326,11 +327,24 @@ export function GrillaSemana({ grupos, dias, hoy, turnosDe, horasSemana, onAbrir
                               </button>
                             )
                           })}
-                          {turnos.length === 0 && !soloLectura && (
+                          {turnos.length === 0 && esLibre(e.id, dia) && (
+                            <button
+                              type="button"
+                              disabled={soloLectura}
+                              onClick={() => onAbrir(e, dia)}
+                              aria-label={`${e.nombre}, ${fechaCorta(dia)}: día libre${soloLectura ? '' : '. Cambiar'}`}
+                              className="flex flex-1 items-center justify-center gap-1.5 rounded-[10px] border text-[12px] font-semibold transition-[transform,box-shadow] duration-150 enabled:hover:-translate-y-px enabled:hover:shadow-[0_3px_10px_-4px_rgba(28,29,26,0.3)] disabled:cursor-default"
+                              style={{ background: LIBRE.bg, color: LIBRE.fg, borderColor: LIBRE.bd }}
+                            >
+                              <TreePalm size={13} aria-hidden="true" />
+                              Libre
+                            </button>
+                          )}
+                          {turnos.length === 0 && !esLibre(e.id, dia) && !soloLectura && (
                             <button
                               type="button"
                               onClick={() => onAbrir(e, dia)}
-                              aria-label={`${e.nombre}, ${fechaCorta(dia)}: libre. Asignar turno`}
+                              aria-label={`${e.nombre}, ${fechaCorta(dia)}: sin turno. Asignar turno`}
                               className={`flex flex-1 items-center justify-center rounded-[10px] border border-dashed border-transparent text-transparent transition-colors ${
                                 drag ? '' : 'hover:border-line-strong hover:bg-card hover:text-muted focus-visible:border-line-strong focus-visible:text-muted'
                               }`}

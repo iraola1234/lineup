@@ -3,7 +3,7 @@ import { supabase } from './supabase'
 import type { Asignacion, CierreDivision } from './types'
 import { toISO } from './fechas'
 
-export type DatosMes = { asignaciones: Asignacion[]; cierres: CierreDivision[] }
+export type DatosMes = { asignaciones: Asignacion[]; cierres: CierreDivision[]; libres: { empleado_id: string; fecha: string }[] }
 
 /** "2026-11" → primer y último día del mes */
 export function limitesMes(mes: string): { desde: string; hasta: string } {
@@ -32,17 +32,19 @@ export function useMes(localId: string, mes: string) {
   const reload = useCallback(async () => {
     if (!supabase) return
     const { desde, hasta } = limitesMes(mes)
-    const [a, c] = await Promise.all([
+    const [a, c, l] = await Promise.all([
       supabase.from('asignaciones').select('*').eq('local_id', localId).gte('fecha_jornada', desde).lte('fecha_jornada', hasta).order('fecha_jornada').order('inicio_plan'),
       supabase.from('cierres_division').select('*').eq('local_id', localId).gte('fecha', desde).lte('fecha', hasta),
+      supabase.from('dias_libres').select('empleado_id, fecha').eq('local_id', localId).gte('fecha', desde).lte('fecha', hasta),
     ])
-    if (a.error || c.error) {
+    if (a.error || c.error || l.error) {
       setError('No se pudo cargar el mes.')
       return
     }
     const d: DatosMes = {
       asignaciones: a.data as Asignacion[],
       cierres: c.data as CierreDivision[],
+      libres: (l.data ?? []) as { empleado_id: string; fecha: string }[],
     }
     cache.set(key, d)
     setDatos(d)

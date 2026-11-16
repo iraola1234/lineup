@@ -13,7 +13,7 @@ import { fmtHoras } from '../../lib/time'
 import { calcularMes, type FilaPersona } from './calculo'
 import { DetallePersona } from './DetallePersona'
 
-type Orden = 'area' | 'nombre' | 'dias' | 'reales'
+type Orden = 'area' | 'nombre' | 'dias' | 'libres' | 'reales'
 
 const sinUnidad = (h: number) => fmtHoras(h).replace(' h', '')
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`
@@ -42,6 +42,7 @@ export function MesPage() {
     const p = [...resumen.personas]
     if (orden === 'nombre') p.sort((a, b) => a.emp.nombre.localeCompare(b.emp.nombre))
     if (orden === 'dias') p.sort((a, b) => b.dias - a.dias)
+    if (orden === 'libres') p.sort((a, b) => b.libres - a.libres)
     if (orden === 'reales') p.sort((a, b) => b.reales - a.reales)
     return p
   }, [resumen, orden])
@@ -74,7 +75,7 @@ export function MesPage() {
 
   const persona = resumen?.personas.find((p) => p.emp.id === abierto) ?? null
   const t = resumen?.totales
-  const vacio = !!resumen && resumen.personas.length === 0
+  const vacio = !!datos && datos.asignaciones.length === 0 && datos.libres.length === 0
   const errorCarga = errorDatos ?? error
 
   return (
@@ -136,7 +137,7 @@ export function MesPage() {
             <dl className="m-0 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
               <Kpi titulo="Horas reales" valor={sinUnidad(t.reales)} unidad="h" detalle={`de ${sinUnidad(t.plan)} h planificadas`} />
               <Kpi titulo="Ausencias" valor={String(t.ausencias)} detalle={t.ausencias ? 'días con falta' : 'Sin faltas'} aviso={t.ausencias > 0} />
-              <Kpi titulo="Personas" valor={String(resumen.personas.length)} detalle="con turnos en el mes" />
+              <Kpi titulo="Días libres" valor={String(t.libres)} detalle="del equipo, hasta hoy" />
               <Kpi
                 titulo="Días cerrados"
                 valor={`${t.diasCerrados}/${t.diasConTurnos}`}
@@ -169,6 +170,7 @@ export function MesPage() {
                   <option value="area">Área</option>
                   <option value="nombre">Nombre</option>
                   <option value="reales">Más horas</option>
+                  <option value="libres">Más días libres</option>
                 </select>
               </div>
               {grupos.map((g) => (
@@ -191,7 +193,7 @@ export function MesPage() {
                           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                             <span className="truncate text-sm font-semibold">{f.emp.nombre}</span>
                             <span className="truncate text-[12px] text-muted">
-                              {plural(f.dias, 'día', 'días')}
+                              {plural(f.dias, 'día', 'días')} · {plural(f.libres, 'libre', 'libres')}
                               {f.ausencias > 0 && <span className="text-danger"> · {plural(f.ausencias, 'ausencia', 'ausencias')}</span>}
                             </span>
                           </span>
@@ -222,6 +224,9 @@ export function MesPage() {
                     <Th orden={orden} campo="dias" onOrden={setOrden} num>
                       Días
                     </Th>
+                    <Th orden={orden} campo="libres" onOrden={setOrden} num>
+                      Libres
+                    </Th>
                     <th className="px-3 py-2.5 text-right font-medium">Ausencias</th>
                     <th className="px-3 py-2.5 text-right font-medium">Planificadas</th>
                     <Th orden={orden} campo="reales" onOrden={setOrden} num>
@@ -235,7 +240,7 @@ export function MesPage() {
                     <Fragment key={g.id}>
                       {g.nombre && (
                         <tr className="border-b border-line bg-foot">
-                          <th colSpan={4} scope="colgroup" className="px-5 py-2 text-left text-[11px] font-semibold tracking-wide text-ink-2 uppercase">
+                          <th colSpan={5} scope="colgroup" className="px-5 py-2 text-left text-[11px] font-semibold tracking-wide text-ink-2 uppercase">
                             {g.nombre} <span className="ml-1 font-mono font-normal text-muted">{g.filas.length}</span>
                           </th>
                           <td className="px-3 py-2 text-right font-mono text-[12px] font-semibold text-ink-2">{sinUnidad(g.filas.reduce((s, f) => s + f.reales, 0))}</td>
@@ -263,6 +268,14 @@ export function MesPage() {
                               </button>
                             </td>
                             <td className="px-3 text-right font-mono tabular-nums">{f.dias}</td>
+                            <td className="px-3 text-right font-mono tabular-nums">
+                              {f.libres}
+                              {f.libresProgramados > 0 && (
+                                <span className="ml-1 text-[11px] text-muted" title={`${f.libresProgramados} día(s) libre(s) marcados más adelante en el mes`}>
+                                  +{f.libresProgramados}
+                                </span>
+                              )}
+                            </td>
                             <td className={`px-3 text-right font-mono tabular-nums ${f.ausencias ? 'font-semibold text-danger' : 'text-faint'}`}>{f.ausencias || '—'}</td>
                             <td className="px-3 text-right font-mono text-muted tabular-nums">{sinUnidad(f.plan)}</td>
                             <td className="px-3 text-right font-mono font-semibold tabular-nums">{sinUnidad(f.reales)}</td>
@@ -279,6 +292,7 @@ export function MesPage() {
                   <tr className="border-t border-line bg-foot font-semibold">
                     <td className="py-3 pr-3 pl-5">Total</td>
                     <td />
+                    <td className="px-3 text-right font-mono tabular-nums">{t.libres}</td>
                     <td className="px-3 text-right font-mono tabular-nums">{resumen.personas.reduce((s, f) => s + f.ausencias, 0) || '—'}</td>
                     <td className="px-3 text-right font-mono tabular-nums">{sinUnidad(t.plan)}</td>
                     <td className="px-3 text-right font-mono tabular-nums">{sinUnidad(t.reales)}</td>

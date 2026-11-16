@@ -81,6 +81,8 @@ export type VistaProps = {
   horasSemana: Map<string, number>
   fecha: string
   onAbrir: (emp: Empleado, fecha: string) => void
+  /** Día libre pedido con antelación. */
+  esLibre: (empleadoId: string, fecha: string) => boolean
   /** Encargados: ven pero no editan. */
   soloLectura?: boolean
 }
