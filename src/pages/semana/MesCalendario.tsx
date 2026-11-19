@@ -48,16 +48,13 @@ export function MesCalendario({ mes, hoy, datos, grupos, desktop, onDia }: Props
     let dias = 0
     let horas = 0
     let libres = 0
-    let programados = 0
     for (let f = desde; f <= hasta; f = addDays(f, 1)) {
       const suyos = (porDia.get(f) ?? []).filter((a) => a.empleado_id === emp.id)
       if (suyos.some((a) => !a.ausente)) dias++
       horas += suyos.reduce((s, a) => s + horasReales(a), 0)
-      const marcado = marcados.get(f)?.has(emp.id) ?? false
-      if (suyos.length === 0 && f <= hoy && ((porDia.get(f)?.length ?? 0) > 0 || marcado)) libres++
-      if (suyos.length === 0 && f > hoy && marcado) programados++
+      if (suyos.length === 0 && f <= hoy) libres++
     }
-    return { dias, horas, libres, programados }
+    return { dias, horas, libres }
   }, [emp, desde, hasta, porDia, marcados, hoy])
 
   return (
@@ -86,7 +83,6 @@ export function MesCalendario({ mes, hoy, datos, grupos, desktop, onDia }: Props
             >
               <TreePalm size={13} aria-hidden="true" />
               <span className="font-mono font-semibold">{resumen.libres}</span> {resumen.libres === 1 ? 'libre' : 'libres'}
-              {resumen.programados > 0 && <span className="opacity-75">· +{resumen.programados} marcados</span>}
             </span>
           </div>
         )}
@@ -122,6 +118,7 @@ export function MesCalendario({ mes, hoy, datos, grupos, desktop, onDia }: Props
                     fecha={f}
                     fuera={fuera}
                     hoy={f === hoy}
+                    pasado={f <= hoy}
                     borde={i > 0}
                     desktop={desktop}
                     turnos={turnos}
@@ -147,6 +144,7 @@ function Celda({
   fecha,
   fuera,
   hoy,
+  pasado,
   borde,
   desktop,
   turnos,
@@ -158,6 +156,7 @@ function Celda({
   fecha: string
   fuera: boolean
   hoy: boolean
+  pasado: boolean
   borde: boolean
   desktop: boolean
   turnos: Asignacion[]
@@ -181,14 +180,14 @@ function Celda({
   if (emp) {
     const suyos = turnos.filter((a) => a.empleado_id === emp.id)
     const marcado = libresMarcados.has(emp.id)
-    const sinTurnoConHorarios = suyos.length === 0 && turnos.length > 0
+    const sinTurnoConHorarios = suyos.length === 0 && pasado
     const texto = suyos.length
       ? suyos.map((a) => `${a.nombre_turno} ${rango(a)}`).join(', ')
       : marcado
         ? 'día libre'
         : sinTurnoConHorarios
           ? 'libre'
-          : 'sin horarios'
+          : 'sin turno'
     return (
       <button type="button" onClick={onClick} aria-label={`${fechaLarga(fecha)}: ${texto}`} className={`${base} hover:bg-hover active:bg-press`}>
         {numero}

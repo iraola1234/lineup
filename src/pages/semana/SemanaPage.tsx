@@ -133,6 +133,26 @@ export function SemanaPage() {
     setEditor(null)
   }
 
+  /** Arrastrar un día libre: lo pasa (o copia) a otro casillero; si ahí había turnos, se quitan. */
+  const moverLibre = (origen: Empleado, fecha: string, destino: Empleado, fechaDestino: string, copiar: boolean) => {
+    const turnos = turnosDe(destino.id, fechaDestino)
+    const quitados = turnos.length ? semana.aplicar([{ desde: fechaDestino, hasta: fechaDestino, empleado: destino.id, filas: [] }]) : null
+    const yaEraLibre = esLibre(destino.id, fechaDestino)
+    Promise.all([libres.marcar(destino.id, fechaDestino, true), copiar ? true : libres.marcar(origen.id, fecha, false)]).then((r) => {
+      if (r.some((ok) => !ok)) toast.show('No se pudo guardar el día libre. Probá de nuevo.', { tone: 'error' })
+    })
+    toast.show(`Día libre ${copiar ? 'copiado' : 'movido'} a ${destino.nombre.split(' ')[0]} · ${fechaCorta(fechaDestino)}`, {
+      action: {
+        label: 'Deshacer',
+        onClick: () => {
+          if (!yaEraLibre) libres.marcar(destino.id, fechaDestino, false)
+          if (!copiar) libres.marcar(origen.id, fecha, true)
+          if (quitados) semana.aplicar(quitados.deshacer)
+        },
+      },
+    })
+  }
+
   const setTurno = (emp: Empleado, fecha: string, op: OpcionTurno, cerrar = true) => {
     if (op) sacarLibre(emp.id, fecha)
     aplicar(
@@ -521,6 +541,8 @@ export function SemanaPage() {
                 }}
                 onMover={mover}
                 onEliminar={eliminarTurno}
+                onMoverLibre={moverLibre}
+                onQuitarLibre={(emp, fecha) => marcarLibre(emp, fecha, false)}
                 accionesDia={accionesDia}
                 soloLectura={soloLectura}
               />

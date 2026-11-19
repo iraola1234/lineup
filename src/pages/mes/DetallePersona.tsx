@@ -39,9 +39,7 @@ export function DetallePersona({ persona, resumen, onClose }: { persona: FilaPer
             <Dato
               titulo="Días libres"
               valor={String(persona.libres)}
-              detalle={
-                persona.libresProgramados > 0 ? `+${persona.libresProgramados} marcado${persona.libresProgramados > 1 ? 's' : ''} a futuro` : 'hasta hoy'
-              }
+              detalle="hasta hoy"
             />
           </dl>
 

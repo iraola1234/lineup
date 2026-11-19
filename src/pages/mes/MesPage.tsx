@@ -193,7 +193,7 @@ export function MesPage() {
                           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                             <span className="truncate text-sm font-semibold">{f.emp.nombre}</span>
                             <span className="truncate text-[12px] text-muted">
-                              {plural(f.dias, 'día', 'días')} · {plural(f.libres, 'libre', 'libres')}
+                              {plural(f.dias, 'día planificado', 'días planificados')} · {plural(f.libres, 'libre', 'libres')}
                               {f.ausencias > 0 && <span className="text-danger"> · {plural(f.ausencias, 'ausencia', 'ausencias')}</span>}
                             </span>
                           </span>
@@ -222,10 +222,10 @@ export function MesPage() {
                       Persona
                     </Th>
                     <Th orden={orden} campo="dias" onOrden={setOrden} num>
-                      Días
+                      Días planificados
                     </Th>
                     <Th orden={orden} campo="libres" onOrden={setOrden} num>
-                      Libres
+                      Libres hasta hoy
                     </Th>
                     <th className="px-3 py-2.5 text-right font-medium">Ausencias</th>
                     <th className="px-3 py-2.5 text-right font-medium">Planificadas</th>
@@ -270,11 +270,6 @@ export function MesPage() {
                             <td className="px-3 text-right font-mono tabular-nums">{f.dias}</td>
                             <td className="px-3 text-right font-mono tabular-nums">
                               {f.libres}
-                              {f.libresProgramados > 0 && (
-                                <span className="ml-1 text-[11px] text-muted" title={`${f.libresProgramados} día(s) libre(s) marcados más adelante en el mes`}>
-                                  +{f.libresProgramados}
-                                </span>
-                              )}
                             </td>
                             <td className={`px-3 text-right font-mono tabular-nums ${f.ausencias ? 'font-semibold text-danger' : 'text-faint'}`}>{f.ausencias || '—'}</td>
                             <td className="px-3 text-right font-mono text-muted tabular-nums">{sinUnidad(f.plan)}</td>

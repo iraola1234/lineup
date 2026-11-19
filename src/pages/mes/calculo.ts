@@ -9,16 +9,14 @@ export type EstadoDia = 'sin' | 'futuro' | 'pendiente' | 'confirmado'
 export type FilaPersona = {
   emp: Empleado
   area: Area | undefined
-  /** Días en que vino a trabajar. */
+  /** Días con turno en el mes (incluye los que todavía no llegaron). */
   dias: number
   /** Días en que tenía turno y faltó. */
   ausencias: number
-  /** Días ya pasados sin turno de trabajo (incluye los marcados como día libre). */
+  /** Días del mes, hasta hoy inclusive, sin turno asignado (los marcados como día libre cuentan igual). */
   libres: number
   /** Fechas de esos días libres. */
   fechasLibres: string[]
-  /** Días libres marcados a futuro (pedidos con antelación). */
-  libresProgramados: number
   plan: number
   reales: number
   turnos: Asignacion[]
@@ -77,10 +75,7 @@ export function calcularMes(datos: DatosMes, empleados: Empleado[], areas: Area[
     })
   }
 
-  // Día libre = día ya pasado sin turno. Se cuentan los días con horarios cargados
-  // (para no sumar semanas que todavía no se armaron) o marcados como libres.
-  const conHorarios = new Set(datos.asignaciones.map((a) => a.fecha_jornada))
-  const marcados = new Set(datos.libres.map((l) => `${l.empleado_id}|${l.fecha}`))
+  // Día libre = cualquier día del mes, hasta hoy inclusive, sin turno asignado.
   const fechasMes: string[] = dias.map((d) => d.fecha)
 
   const ordenArea = new Map(areas.map((a, i) => [a.id, i]))
@@ -93,8 +88,7 @@ export function calcularMes(datos: DatosMes, empleados: Empleado[], areas: Area[
       const conTurno = new Set(turnos.map((a) => a.fecha_jornada))
       const vino = new Set(turnos.filter((a) => !a.ausente).map((a) => a.fecha_jornada))
       const falto = new Set(turnos.filter((a) => a.ausente && !vino.has(a.fecha_jornada)).map((a) => a.fecha_jornada))
-      const fechasLibres = fechasMes.filter((f) => f <= hoy && !conTurno.has(f) && (conHorarios.has(f) || marcados.has(`${emp.id}|${f}`)))
-      const libresProgramados = fechasMes.filter((f) => f > hoy && !conTurno.has(f) && marcados.has(`${emp.id}|${f}`)).length
+      const fechasLibres = fechasMes.filter((f) => f <= hoy && !conTurno.has(f))
       return {
         emp,
         area: areas.find((a) => a.id === emp.area_id),
@@ -102,7 +96,6 @@ export function calcularMes(datos: DatosMes, empleados: Empleado[], areas: Area[
         ausencias: falto.size,
         libres: fechasLibres.length,
         fechasLibres,
-        libresProgramados,
         plan: turnos.reduce((s, a) => s + Number(a.horas_plan), 0),
         reales: turnos.reduce((s, a) => s + horasReales(a), 0),
         turnos,

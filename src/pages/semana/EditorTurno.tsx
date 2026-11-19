@@ -236,6 +236,11 @@ function Contenido({
               {turnos.length > 1 ? 'Quitar todos' : 'Quitar turno'}
             </Button>
           )}
+          {turnos.length === 0 && libre && (
+            <Button variant="danger" size="sm" onClick={() => onLibre(false)} icon={<Trash2 size={15} />}>
+              Quitar día libre
+            </Button>
+          )}
           <span className="flex-1" />
           {turnos.length >= 1 && (
             <Button variant="subtle" size="sm" onClick={() => setAgregando(true)} icon={<Plus size={15} />}>

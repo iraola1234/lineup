@@ -18,14 +18,20 @@ type Props = {
   onAbrir: (emp: Empleado, fecha: string) => void
   onMover: (asignacionId: string, destino: Empleado, fecha: string, copiar: boolean) => void
   onEliminar: (asignacionId: string) => void
+  /** Arrastrar un día libre a otro casillero (o copiarlo con ⌘/Ctrl). */
+  onMoverLibre: (origen: Empleado, fecha: string, destino: Empleado, fechaDestino: string, copiar: boolean) => void
+  onQuitarLibre: (emp: Empleado, fecha: string) => void
   accionesDia: (fecha: string) => MenuItem[]
   /** Encargados: ven la grilla sin poder editar ni arrastrar. */
   soloLectura?: boolean
 }
 
 /** Estado interno del arrastre (se muta en cada movimiento sin volver a dibujar la grilla). */
+/** Lo que se arrastra: un turno o un día libre. */
+type Item = { tipo: 'turno'; id: string; a: Asignacion } | { tipo: 'libre'; id: string; emp: Empleado; fecha: string }
+
 type DragRef = {
-  a: Asignacion
+  item: Item
   sx: number
   sy: number
   offX: number
@@ -49,7 +55,21 @@ const UMBRAL = 5 // px que hay que mover antes de que empiece el arrastre (si no
  * Clic en un casillero para asignar. Arrastrar un turno lo mueve; con ⌘ (Ctrl en Windows) lo copia;
  * soltarlo en la papelera lo elimina.
  */
-export function GrillaSemana({ grupos, dias, hoy, turnosDe, esLibre, horasSemana, onAbrir, onMover, onEliminar, accionesDia, soloLectura = false }: Props) {
+export function GrillaSemana({
+  grupos,
+  dias,
+  hoy,
+  turnosDe,
+  esLibre,
+  horasSemana,
+  onAbrir,
+  onMover,
+  onEliminar,
+  onMoverLibre,
+  onQuitarLibre,
+  accionesDia,
+  soloLectura = false,
+}: Props) {
   const todos = useMemo(() => grupos.flatMap((g) => g.empleados), [grupos])
   const porId = useMemo(() => new Map(todos.map((e) => [e.id, e])), [todos])
 
@@ -57,16 +77,16 @@ export function GrillaSemana({ grupos, dias, hoy, turnosDe, esLibre, horasSemana
   const ghostRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<DragView | null>(null)
   const suprimirClick = useRef(false)
-  const cbs = useRef({ onMover, onEliminar, porId })
+  const cbs = useRef({ onMover, onEliminar, onMoverLibre, onQuitarLibre, porId })
   useEffect(() => {
-    cbs.current = { onMover, onEliminar, porId }
+    cbs.current = { onMover, onEliminar, onMoverLibre, onQuitarLibre, porId }
   })
 
   useEffect(() => {
     const sync = (d: DragRef) => {
       document.body.classList.toggle('copiando', d.copiar && d.destino !== 'papelera')
       setDrag((v) =>
-        v && v.copiar === d.copiar && v.destino === d.destino && v.id === d.a.id ? v : { id: d.a.id, copiar: d.copiar, destino: d.destino },
+        v && v.copiar === d.copiar && v.destino === d.destino && v.id === d.item.id ? v : { id: d.item.id, copiar: d.copiar, destino: d.destino },
       )
     }
     const terminar = () => {
@@ -109,12 +129,15 @@ export function GrillaSemana({ grupos, dias, hoy, turnosDe, esLibre, horasSemana
       if (d.activo) {
         suprimirClick.current = true
         window.setTimeout(() => (suprimirClick.current = false), 0)
+        const it = d.item
         if (d.destino === 'papelera') {
-          cbs.current.onEliminar(d.a.id)
+          if (it.tipo === 'turno') cbs.current.onEliminar(it.a.id)
+          else cbs.current.onQuitarLibre(it.emp, it.fecha)
         } else if (d.destino) {
           const [empId, fecha] = d.destino.split('|')
           const emp = cbs.current.porId.get(empId)
-          if (emp) cbs.current.onMover(d.a.id, emp, fecha, d.copiar)
+          if (emp && it.tipo === 'turno') cbs.current.onMover(it.a.id, emp, fecha, d.copiar)
+          if (emp && it.tipo === 'libre' && d.destino !== it.id.slice(6)) cbs.current.onMoverLibre(it.emp, it.fecha, emp, fecha, d.copiar)
         }
       }
       terminar()
@@ -148,11 +171,11 @@ export function GrillaSemana({ grupos, dias, hoy, turnosDe, esLibre, horasSemana
     }
   }, [])
 
-  const empezar = (e: React.PointerEvent<HTMLElement>, a: Asignacion) => {
-    if (e.button !== 0 || e.pointerType === 'touch' || a.id.startsWith('tmp-')) return
+  const empezar = (e: React.PointerEvent<HTMLElement>, item: Item) => {
+    if (e.button !== 0 || e.pointerType === 'touch' || item.id.startsWith('tmp-')) return
     const r = e.currentTarget.getBoundingClientRect()
     dragRef.current = {
-      a,
+      item,
       sx: e.clientX,
       sy: e.clientY,
       offX: e.clientX - r.left,
@@ -304,7 +327,7 @@ export function GrillaSemana({ grupos, dias, hoy, turnosDe, esLibre, horasSemana
                                 key={a.id}
                                 type="button"
                                 disabled={soloLectura}
-                                onPointerDown={soloLectura ? undefined : (ev) => empezar(ev, a)}
+                                onPointerDown={soloLectura ? undefined : (ev) => empezar(ev, { tipo: 'turno', id: a.id, a })}
                                 onClick={() => {
                                   if (!suprimirClick.current) onAbrir(e, dia)
                                 }}
@@ -331,9 +354,19 @@ export function GrillaSemana({ grupos, dias, hoy, turnosDe, esLibre, horasSemana
                             <button
                               type="button"
                               disabled={soloLectura}
-                              onClick={() => onAbrir(e, dia)}
+                              onPointerDown={soloLectura ? undefined : (ev) => empezar(ev, { tipo: 'libre', id: `libre|${key}`, emp: e, fecha: dia })}
+                              onClick={() => {
+                                if (!suprimirClick.current) onAbrir(e, dia)
+                              }}
+                              onKeyDown={(ev) => {
+                                if (!soloLectura && (ev.key === 'Delete' || ev.key === 'Backspace')) onQuitarLibre(e, dia)
+                              }}
                               aria-label={`${e.nombre}, ${fechaCorta(dia)}: día libre${soloLectura ? '' : '. Cambiar'}`}
-                              className="flex flex-1 items-center justify-center gap-1.5 rounded-[10px] border text-[12px] font-semibold transition-[transform,box-shadow] duration-150 enabled:hover:-translate-y-px enabled:hover:shadow-[0_3px_10px_-4px_rgba(28,29,26,0.3)] disabled:cursor-default"
+                              className={`flex flex-1 items-center justify-center gap-1.5 rounded-[10px] border text-[12px] font-semibold transition-[transform,box-shadow,opacity] duration-150 select-none disabled:cursor-default ${
+                                soloLectura ? '' : 'touch-none'
+                              } ${drag || soloLectura ? '' : 'cursor-grab hover:-translate-y-px hover:shadow-[0_3px_10px_-4px_rgba(28,29,26,0.3)]'} ${
+                                drag?.id === `libre|${key}` && modo !== 'copiar' ? 'opacity-35' : ''
+                              }`}
                               style={{ background: LIBRE.bg, color: LIBRE.fg, borderColor: LIBRE.bd }}
                             >
                               <TreePalm size={13} aria-hidden="true" />
@@ -376,7 +409,20 @@ export function GrillaSemana({ grupos, dias, hoy, turnosDe, esLibre, horasSemana
               style={{ width: d.w, transform: `translate(${d.x}px, ${d.y}px) rotate(-2deg)` }}
             >
               {(() => {
-                const c = turnoColor(d.a.color)
+                if (d.item.tipo === 'libre')
+                  return (
+                    <div
+                      className={`flex origin-top-left items-center justify-center gap-1.5 rounded-[10px] border text-[12px] font-semibold shadow-[0_14px_30px_-10px_rgba(28,29,26,0.45)] transition-[opacity,transform] duration-150 ${
+                        enPapelera ? 'scale-50 opacity-40' : ''
+                      }`}
+                      style={{ height: d.h, background: LIBRE.bg, color: LIBRE.fg, borderColor: LIBRE.bd }}
+                    >
+                      <TreePalm size={13} aria-hidden="true" />
+                      Libre
+                    </div>
+                  )
+                const a = d.item.a
+                const c = turnoColor(a.color)
                 return (
                   <div
                     className={`flex origin-top-left flex-col items-start rounded-[10px] border px-2 py-1.5 shadow-[0_14px_30px_-10px_rgba(28,29,26,0.45)] transition-[opacity,transform] duration-150 ${
@@ -384,8 +430,8 @@ export function GrillaSemana({ grupos, dias, hoy, turnosDe, esLibre, horasSemana
                     }`}
                     style={{ height: d.h, background: c.bg, color: c.fg, borderColor: c.bd }}
                   >
-                    <span className="font-mono text-[12px] leading-tight font-semibold">{rango(d.a)}</span>
-                    <span className="text-[11px] leading-tight opacity-85">{d.a.nombre_turno}</span>
+                    <span className="font-mono text-[12px] leading-tight font-semibold">{rango(a)}</span>
+                    <span className="text-[11px] leading-tight opacity-85">{a.nombre_turno}</span>
                   </div>
                 )
               })()}

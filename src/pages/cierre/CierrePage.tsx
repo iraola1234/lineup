@@ -326,9 +326,9 @@ export function CierrePage() {
               </section>
 
               {(() => {
-                // Día libre: sin turno ese día (cuenta si hay horarios cargados o si se marcó como libre)
+                // Día libre: no tenía turno asignado ese día
                 const conTurno = new Set(semana.asignaciones.filter((a) => a.fecha_jornada === actual.fecha).map((a) => a.empleado_id))
-                const lista = empleados.filter((e) => e.activo && !conTurno.has(e.id) && (conTurno.size > 0 || libres.esLibre(e.id, actual.fecha)))
+                const lista = empleados.filter((e) => e.activo && !conTurno.has(e.id))
                 if (lista.length === 0) return null
                 return (
                   <section aria-label="Días libres" className="flex flex-col gap-2 rounded-2xl border border-line bg-card px-4 py-3 shadow-card lg:px-5">
